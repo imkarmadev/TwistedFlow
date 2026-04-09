@@ -23,6 +23,7 @@ import { useTauri, type ProjectDetail, type Environment } from "./use-tauri";
 import type { DataType } from "@twistedrest/core";
 import { ConsoleContext, type ConsoleEntry } from "./lib/console-context";
 import { ConsolePanel } from "./components/console/console-panel";
+import { checkForUpdate } from "./lib/update-checker";
 import s from "./App.module.css";
 
 export interface ProjectItem {
@@ -37,6 +38,17 @@ export default function App() {
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [activeFlowId, setActiveFlowId] = useState<string | null>(null);
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
+
+  // Lightweight update check on startup
+  const [updateInfo, setUpdateInfo] = useState<{
+    latestVersion: string;
+    releaseUrl: string;
+  } | null>(null);
+  useEffect(() => {
+    void checkForUpdate().then((info) => {
+      if (info) setUpdateInfo(info);
+    });
+  }, []);
 
   // Project metadata + environments are loaded once per active project
   // and passed down so the canvas + Start node can use them at run time.
@@ -236,6 +248,26 @@ export default function App() {
        * behind everything we paint.
        */}
       <TitleBar />
+
+      {updateInfo && (
+        <div className={s.updateBanner}>
+          <span>v{updateInfo.latestVersion} available</span>
+          <a
+            href={updateInfo.releaseUrl}
+            target="_blank"
+            rel="noopener"
+            className={s.updateLink}
+          >
+            Download
+          </a>
+          <button
+            className={s.updateDismiss}
+            onClick={() => setUpdateInfo(null)}
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       <div className={s.body}>
         <Sidebar

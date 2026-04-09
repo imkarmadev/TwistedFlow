@@ -40,6 +40,11 @@ const FILES = [
     pattern: /"version":\s*"[\d.]+"/,
     replace: (v: string) => `"version": "${v}"`,
   },
+  {
+    path: resolve(ROOT, "apps/desktop/src/mainview/lib/update-checker.ts"),
+    pattern: /const CURRENT_VERSION = "[\d.]+"/,
+    replace: (v: string) => `const CURRENT_VERSION = "${v}"`,
+  },
 ];
 
 function getCurrentVersion(): string {

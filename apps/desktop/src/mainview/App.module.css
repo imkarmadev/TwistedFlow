@@ -45,3 +45,44 @@
   font-size: 13px;
   color: var(--text-secondary);
 }
+
+/* ── Update banner ─────────────────────────────────────── */
+
+.updateBanner {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 14px;
+  background: rgba(76, 194, 255, 0.12);
+  border: 1px solid rgba(76, 194, 255, 0.3);
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--accent);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.updateLink {
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+.updateDismiss {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 2px;
+}
+
+.updateDismiss:hover {
+  color: var(--text-primary);
+}
