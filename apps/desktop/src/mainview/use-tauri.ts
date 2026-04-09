@@ -46,7 +46,8 @@ export type AuthType =
   | "bearer"
   | "basic"
   | "apiKey"
-  | "oauth2_client_credentials";
+  | "oauth2_client_credentials"
+  | "oauth2_authorization_code";
 
 export interface AuthConfig {
   authType: AuthType;
@@ -56,11 +57,13 @@ export interface AuthConfig {
   apiKeyName: string;
   apiKeyValue: string;
   apiKeyLocation: "header" | "query";
+  oauth2AuthUrl: string;
   oauth2TokenUrl: string;
   oauth2ClientId: string;
   oauth2ClientSecret: string;
   oauth2Scopes: string;
   oauth2AccessToken: string;
+  oauth2RefreshToken: string;
   oauth2ExpiresAt: number;
 }
 
@@ -120,7 +123,16 @@ export interface RPC {
       clientId: string;
       clientSecret: string;
       scopes: string;
-    }) => Promise<{ accessToken: string; expiresAt: number } | null>;
+    }) => Promise<{ accessToken: string; refreshToken: string; expiresAt: number } | null>;
+
+    /** OAuth2 Authorization Code flow — opens browser, waits for callback. */
+    oauth2Authorize: (params: {
+      authUrl: string;
+      tokenUrl: string;
+      clientId: string;
+      clientSecret: string;
+      scopes: string;
+    }) => Promise<{ accessToken: string; refreshToken: string; expiresAt: number } | null>;
     deleteEnvironment: (params: { id: string }) => Promise<{ success: boolean }>;
 
     // Flows
@@ -201,8 +213,8 @@ function makeRpc(): RPC {
             auth: {
               authType: "none", bearerToken: "", basicUsername: "", basicPassword: "",
               apiKeyName: "", apiKeyValue: "", apiKeyLocation: "header",
-              oauth2TokenUrl: "", oauth2ClientId: "", oauth2ClientSecret: "",
-              oauth2Scopes: "", oauth2AccessToken: "", oauth2ExpiresAt: 0,
+              oauth2AuthUrl: "", oauth2TokenUrl: "", oauth2ClientId: "", oauth2ClientSecret: "",
+              oauth2Scopes: "", oauth2AccessToken: "", oauth2RefreshToken: "", oauth2ExpiresAt: 0,
             },
             updatedAt: "",
           },
@@ -220,12 +232,24 @@ function makeRpc(): RPC {
 
       oauth2FetchToken: async ({ tokenUrl, clientId, clientSecret, scopes }) => {
         try {
-          return await invoke<{ accessToken: string; expiresAt: number }>(
+          return await invoke<{ accessToken: string; refreshToken: string; expiresAt: number }>(
             "oauth2_client_credentials",
             { tokenUrl, clientId, clientSecret, scopes },
           );
         } catch (err) {
           console.error("[invoke oauth2_client_credentials]", err);
+          return null;
+        }
+      },
+
+      oauth2Authorize: async ({ authUrl, tokenUrl, clientId, clientSecret, scopes }) => {
+        try {
+          return await invoke<{ accessToken: string; refreshToken: string; expiresAt: number }>(
+            "oauth2_authorize",
+            { authUrl, tokenUrl, clientId, clientSecret, scopes },
+          );
+        } catch (err) {
+          console.error("[invoke oauth2_authorize]", err);
           return null;
         }
       },

@@ -53,6 +53,7 @@ pub fn run() {
             commands::delete_flow,
             http::http_request,
             http::oauth2_client_credentials,
+            http::oauth2_authorize,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

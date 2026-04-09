@@ -643,6 +643,7 @@ async function execHttpNode(
         }
         break;
       case "oauth2_client_credentials":
+      case "oauth2_authorization_code":
         if (auth.oauth2AccessToken) {
           headerMap.set("Authorization", `Bearer ${auth.oauth2AccessToken}`);
         }

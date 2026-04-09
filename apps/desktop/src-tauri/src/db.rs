@@ -241,7 +241,9 @@ pub struct AuthConfig {
     #[serde(default = "default_api_key_location")]
     pub api_key_location: String,
 
-    // OAuth2 Client Credentials
+    // OAuth2 (shared fields for both grant types)
+    #[serde(default)]
+    pub oauth2_auth_url: String,
     #[serde(default)]
     pub oauth2_token_url: String,
     #[serde(default)]
@@ -253,6 +255,9 @@ pub struct AuthConfig {
     /// Cached access token (fetched at runtime, persisted for convenience)
     #[serde(default)]
     pub oauth2_access_token: String,
+    /// Refresh token (authorization code flow only)
+    #[serde(default)]
+    pub oauth2_refresh_token: String,
     /// Unix timestamp (seconds) when the access token expires
     #[serde(default)]
     pub oauth2_expires_at: u64,

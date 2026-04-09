@@ -437,6 +437,7 @@ function EnvironmentEditor({
           <option value="basic">Basic Auth</option>
           <option value="apiKey">API Key</option>
           <option value="oauth2_client_credentials">OAuth2 Client Credentials</option>
+          <option value="oauth2_authorization_code">OAuth2 Authorization Code</option>
         </select>
       </div>
 
@@ -514,8 +515,20 @@ function EnvironmentEditor({
         </>
       )}
 
-      {auth.authType === "oauth2_client_credentials" && (
+      {(auth.authType === "oauth2_client_credentials" || auth.authType === "oauth2_authorization_code") && (
         <>
+          {auth.authType === "oauth2_authorization_code" && (
+            <div className={s.field}>
+              <label className={s.label}>Authorization URL</label>
+              <input
+                className={s.input}
+                value={auth.oauth2AuthUrl}
+                onChange={(e) => updateAuth({ oauth2AuthUrl: e.target.value })}
+                placeholder="https://accounts.google.com/o/oauth2/v2/auth"
+                spellCheck={false}
+              />
+            </div>
+          )}
           <div className={s.field}>
             <label className={s.label}>Token URL</label>
             <input
@@ -557,14 +570,40 @@ function EnvironmentEditor({
           <div className={s.field}>
             <button
               className={s.primaryBtn}
-              onClick={fetchOAuth2Token}
+              onClick={
+                auth.authType === "oauth2_authorization_code"
+                  ? async () => {
+                      setFetchingToken(true);
+                      const result = await rpc.request.oauth2Authorize({
+                        authUrl: auth.oauth2AuthUrl,
+                        tokenUrl: auth.oauth2TokenUrl,
+                        clientId: auth.oauth2ClientId,
+                        clientSecret: auth.oauth2ClientSecret,
+                        scopes: auth.oauth2Scopes,
+                      });
+                      if (result) {
+                        updateAuth({
+                          oauth2AccessToken: result.accessToken,
+                          oauth2RefreshToken: result.refreshToken,
+                          oauth2ExpiresAt: result.expiresAt,
+                        });
+                      }
+                      setFetchingToken(false);
+                    }
+                  : fetchOAuth2Token
+              }
               disabled={fetchingToken || !auth.oauth2TokenUrl || !auth.oauth2ClientId}
             >
-              {fetchingToken ? "Fetching…" : "Fetch Token"}
+              {fetchingToken
+                ? "Waiting for authorization…"
+                : auth.authType === "oauth2_authorization_code"
+                  ? "Authorize in Browser"
+                  : "Fetch Token"}
             </button>
             {auth.oauth2AccessToken && (
               <div className={s.hint} style={{ color: "#6ee7b7" }}>
                 ✓ Token cached
+                {auth.oauth2RefreshToken && " · refresh token stored"}
                 {auth.oauth2ExpiresAt > 0 &&
                   ` · expires ${new Date(auth.oauth2ExpiresAt * 1000).toLocaleTimeString()}`}
               </div>
