@@ -1,6 +1,6 @@
 [package]
 name = "twistedrest"
-version = "0.1.0"
+version = "0.1.1"
 description = "TwistedRest — visual API workflow builder"
 authors = ["you"]
 edition = "2021"

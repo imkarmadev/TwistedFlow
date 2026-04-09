@@ -10,7 +10,8 @@
     "build": "turbo build",
     "typecheck": "turbo typecheck",
     "lint": "turbo lint",
-    "test": "turbo test"
+    "test": "turbo test",
+    "release": "bun run scripts/release.ts"
   },
   "devDependencies": {
     "turbo": "^2.4.0",

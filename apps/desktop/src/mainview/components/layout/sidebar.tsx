@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import clsx from "clsx";
 import type { ProjectItem } from "../../App";
 import type { RPC } from "../../use-tauri";
+import { exportFlow, importFlow } from "../../lib/flow-io";
 import s from "./sidebar.module.css";
 
 interface FlowItem {
@@ -132,13 +133,26 @@ export function Sidebar({
               {isActive && (
                 <div className={s.flowList}>
                   {flows.map((f) => (
-                    <button
-                      key={f.id}
-                      className={clsx(s.flowItem, f.id === activeFlowId && s.flowItemActive)}
-                      onClick={() => onSelectFlow(f.id)}
-                    >
-                      {f.name}
-                    </button>
+                    <div key={f.id} className={s.flowRow}>
+                      <button
+                        className={clsx(s.flowItem, f.id === activeFlowId && s.flowItemActive)}
+                        onClick={() => onSelectFlow(f.id)}
+                      >
+                        {f.name}
+                      </button>
+                      {f.id === activeFlowId && rpc && (
+                        <span
+                          className={s.flowExport}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void exportFlow(rpc, f.id);
+                          }}
+                          title="Export flow as JSON"
+                        >
+                          ↓
+                        </span>
+                      )}
+                    </div>
                   ))}
 
                   {creatingFlowFor === p.id ? (
@@ -158,15 +172,31 @@ export function Sidebar({
                       placeholder="Flow name"
                     />
                   ) : (
-                    <button
-                      className={s.addFlow}
-                      onClick={() => {
-                        setCreatingFlowFor(p.id);
-                        setDraft("");
-                      }}
-                    >
-                      + new flow
-                    </button>
+                    <div className={s.flowActions}>
+                      <button
+                        className={s.addFlow}
+                        onClick={() => {
+                          setCreatingFlowFor(p.id);
+                          setDraft("");
+                        }}
+                      >
+                        + new flow
+                      </button>
+                      <button
+                        className={s.addFlow}
+                        onClick={async () => {
+                          if (!rpc) return;
+                          const newId = await importFlow(rpc, p.id);
+                          if (newId) {
+                            const list = await rpc.request.listFlows({ projectId: p.id });
+                            setFlowsByProject((prev) => ({ ...prev, [p.id]: list }));
+                            onSelectFlow(newId);
+                          }
+                        }}
+                      >
+                        + import
+                      </button>
+                    </div>
                   )}
                 </div>
               )}

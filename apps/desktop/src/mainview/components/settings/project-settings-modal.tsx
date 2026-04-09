@@ -31,6 +31,7 @@ interface ProjectSettingsModalProps {
   environments: Environment[];
   onClose: () => void;
   onChanged: () => void;
+  onDeleted: () => void;
 }
 
 type Tab = "general" | "environments";
@@ -41,6 +42,7 @@ export function ProjectSettingsModal({
   environments,
   onClose,
   onChanged,
+  onDeleted,
 }: ProjectSettingsModalProps) {
   const [tab, setTab] = useState<Tab>("general");
 
@@ -71,7 +73,7 @@ export function ProjectSettingsModal({
 
         <div className={s.body}>
           {tab === "general" && (
-            <GeneralTab rpc={rpc} project={project} onChanged={onChanged} />
+            <GeneralTab rpc={rpc} project={project} onChanged={onChanged} onDeleted={onDeleted} />
           )}
           {tab === "environments" && (
             <EnvironmentsTab
@@ -93,14 +95,17 @@ function GeneralTab({
   rpc,
   project,
   onChanged,
+  onDeleted,
 }: {
   rpc: RPC;
   project: ProjectDetail;
   onChanged: () => void;
+  onDeleted: () => void;
 }) {
   const [name, setName] = useState(project.name);
   const [headers, setHeaders] = useState<HeaderEntry[]>(project.headers);
   const [saving, setSaving] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   // Sync local state when project changes externally
   useEffect(() => {
@@ -186,6 +191,20 @@ function GeneralTab({
       </div>
 
       <div className={s.actions}>
+        <button
+          className={s.dangerBtn}
+          onClick={async () => {
+            if (!confirmingDelete) {
+              setConfirmingDelete(true);
+              setTimeout(() => setConfirmingDelete(false), 4000);
+              return;
+            }
+            await rpc.request.deleteProject({ id: project.id });
+            onDeleted();
+          }}
+        >
+          {confirmingDelete ? "Click again to delete project" : "Delete Project"}
+        </button>
         <button className={s.primaryBtn} onClick={save} disabled={saving}>
           {saving ? "Saving…" : "Save"}
         </button>

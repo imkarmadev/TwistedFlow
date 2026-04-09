@@ -1,0 +1,353 @@
+{
+  "twistedrest": 1,
+  "name": "JSONPlaceholder Demo",
+  "nodes": [
+    {
+      "id": "start-1",
+      "kind": "start",
+      "position": { "x": 60, "y": 240 },
+      "config": { "environmentId": null }
+    },
+    {
+      "id": "http-users",
+      "kind": "httpRequest",
+      "position": { "x": 320, "y": 200 },
+      "config": {
+        "method": "GET",
+        "url": "https://jsonplaceholder.typicode.com/users/1",
+        "headers": [],
+        "body": "",
+        "responseSchema": "z.object({\n  id: z.number().int(),\n  name: z.string(),\n  username: z.string(),\n  email: z.string(),\n  address: z.object({\n    street: z.string(),\n    city: z.string(),\n    zipcode: z.string()\n  }),\n  phone: z.string(),\n  company: z.object({\n    name: z.string()\n  })\n})"
+      }
+    },
+    {
+      "id": "break-user",
+      "kind": "breakObject",
+      "position": { "x": 640, "y": 120 },
+      "config": {}
+    },
+    {
+      "id": "log-user",
+      "kind": "log",
+      "position": { "x": 640, "y": 340 },
+      "config": { "label": "User loaded" }
+    },
+    {
+      "id": "make-summary",
+      "kind": "makeObject",
+      "position": { "x": 900, "y": 80 },
+      "config": {
+        "fields": [
+          { "key": "name", "type": "string" },
+          { "key": "email", "type": "string" },
+          { "key": "company", "type": "string" }
+        ]
+      }
+    },
+    {
+      "id": "break-company",
+      "kind": "breakObject",
+      "position": { "x": 900, "y": 280 },
+      "config": {}
+    },
+    {
+      "id": "convert-id",
+      "kind": "convert",
+      "position": { "x": 640, "y": 500 },
+      "config": { "targetType": "string" }
+    },
+    {
+      "id": "http-posts",
+      "kind": "httpRequest",
+      "position": { "x": 900, "y": 440 },
+      "config": {
+        "method": "GET",
+        "url": "https://jsonplaceholder.typicode.com/posts?userId=#{userId}",
+        "headers": [],
+        "body": "",
+        "responseSchema": "z.array(z.object({\n  userId: z.number().int(),\n  id: z.number().int(),\n  title: z.string(),\n  body: z.string()\n}))"
+      }
+    },
+    {
+      "id": "match-status",
+      "kind": "match",
+      "position": { "x": 1220, "y": 400 },
+      "config": {
+        "cases": [
+          { "value": "200", "label": "OK" },
+          { "value": "404", "label": "Not Found" }
+        ]
+      }
+    },
+    {
+      "id": "foreach-posts",
+      "kind": "forEachSequential",
+      "position": { "x": 1500, "y": 300 },
+      "config": {}
+    },
+    {
+      "id": "break-post",
+      "kind": "breakObject",
+      "position": { "x": 1780, "y": 340 },
+      "config": {}
+    },
+    {
+      "id": "log-post",
+      "kind": "log",
+      "position": { "x": 1780, "y": 180 },
+      "config": { "label": "Post title" }
+    },
+    {
+      "id": "log-summary",
+      "kind": "log",
+      "position": { "x": 1200, "y": 80 },
+      "config": { "label": "User summary" }
+    },
+    {
+      "id": "log-error",
+      "kind": "log",
+      "position": { "x": 1500, "y": 560 },
+      "config": { "label": "Error: Not Found" }
+    },
+    {
+      "id": "tap-posts",
+      "kind": "tap",
+      "position": { "x": 1500, "y": 140 },
+      "config": {}
+    },
+    {
+      "id": "emit-loaded",
+      "kind": "emitEvent",
+      "position": { "x": 1200, "y": 200 },
+      "config": {
+        "name": "userProcessed",
+        "payload": [
+          { "key": "userName", "type": "string" }
+        ]
+      }
+    },
+    {
+      "id": "on-loaded",
+      "kind": "onEvent",
+      "position": { "x": 60, "y": 620 },
+      "config": { "name": "userProcessed" }
+    },
+    {
+      "id": "log-event",
+      "kind": "log",
+      "position": { "x": 340, "y": 600 },
+      "config": { "label": "Event received" }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "kind": "exec",
+      "fromNode": "start-1",
+      "fromPin": "exec-out",
+      "toNode": "http-users",
+      "toPin": "exec-in"
+    },
+    {
+      "id": "e2",
+      "kind": "exec",
+      "fromNode": "http-users",
+      "fromPin": "exec-out",
+      "toNode": "log-user",
+      "toPin": "exec-in"
+    },
+    {
+      "id": "e3",
+      "kind": "exec",
+      "fromNode": "log-user",
+      "fromPin": "exec-out",
+      "toNode": "http-posts",
+      "toPin": "exec-in"
+    },
+    {
+      "id": "e4",
+      "kind": "exec",
+      "fromNode": "http-posts",
+      "fromPin": "exec-out",
+      "toNode": "match-status",
+      "toPin": "exec-in"
+    },
+    {
+      "id": "e5",
+      "kind": "exec",
+      "fromNode": "match-status",
+      "fromPin": "exec-case:0",
+      "toNode": "emit-loaded",
+      "toPin": "exec-in"
+    },
+    {
+      "id": "e5b",
+      "kind": "exec",
+      "fromNode": "emit-loaded",
+      "fromPin": "exec-out",
+      "toNode": "foreach-posts",
+      "toPin": "exec-in"
+    },
+    {
+      "id": "e6",
+      "kind": "exec",
+      "fromNode": "foreach-posts",
+      "fromPin": "exec-body",
+      "toNode": "log-post",
+      "toPin": "exec-in"
+    },
+    {
+      "id": "e7",
+      "kind": "exec",
+      "fromNode": "match-status",
+      "fromPin": "exec-case:1",
+      "toNode": "log-error",
+      "toPin": "exec-in"
+    },
+    {
+      "id": "e-event",
+      "kind": "exec",
+      "fromNode": "on-loaded",
+      "fromPin": "exec-out",
+      "toNode": "log-event",
+      "toPin": "exec-in"
+    },
+    {
+      "id": "e-log-summary",
+      "kind": "exec",
+      "fromNode": "log-summary",
+      "fromPin": "exec-out",
+      "toNode": "emit-loaded",
+      "toPin": "exec-in"
+    },
+    {
+      "id": "d1",
+      "kind": "data",
+      "fromNode": "http-users",
+      "fromPin": "out:name",
+      "toNode": "log-user",
+      "toPin": "in:value"
+    },
+    {
+      "id": "d2",
+      "kind": "data",
+      "fromNode": "http-users",
+      "fromPin": "out:id",
+      "toNode": "break-user",
+      "toPin": "in:object"
+    },
+    {
+      "id": "d3",
+      "kind": "data",
+      "fromNode": "http-users",
+      "fromPin": "out:id",
+      "toNode": "convert-id",
+      "toPin": "in:value"
+    },
+    {
+      "id": "d4",
+      "kind": "data",
+      "fromNode": "convert-id",
+      "fromPin": "out:value",
+      "toNode": "http-posts",
+      "toPin": "in:userId"
+    },
+    {
+      "id": "d5",
+      "kind": "data",
+      "fromNode": "http-posts",
+      "fromPin": "out:status",
+      "toNode": "match-status",
+      "toPin": "in:value"
+    },
+    {
+      "id": "d6",
+      "kind": "data",
+      "fromNode": "http-posts",
+      "fromPin": "out:value",
+      "toNode": "foreach-posts",
+      "toPin": "in:array"
+    },
+    {
+      "id": "d7",
+      "kind": "data",
+      "fromNode": "foreach-posts",
+      "fromPin": "out:item",
+      "toNode": "break-post",
+      "toPin": "in:object"
+    },
+    {
+      "id": "d8",
+      "kind": "data",
+      "fromNode": "break-post",
+      "fromPin": "out:title",
+      "toNode": "log-post",
+      "toPin": "in:value"
+    },
+    {
+      "id": "d9",
+      "kind": "data",
+      "fromNode": "http-users",
+      "fromPin": "out:name",
+      "toNode": "make-summary",
+      "toPin": "in:name"
+    },
+    {
+      "id": "d10",
+      "kind": "data",
+      "fromNode": "http-users",
+      "fromPin": "out:email",
+      "toNode": "make-summary",
+      "toPin": "in:email"
+    },
+    {
+      "id": "d11",
+      "kind": "data",
+      "fromNode": "http-users",
+      "fromPin": "out:company",
+      "toNode": "break-company",
+      "toPin": "in:object"
+    },
+    {
+      "id": "d12",
+      "kind": "data",
+      "fromNode": "break-company",
+      "fromPin": "out:name",
+      "toNode": "make-summary",
+      "toPin": "in:company"
+    },
+    {
+      "id": "d13",
+      "kind": "data",
+      "fromNode": "make-summary",
+      "fromPin": "out:object",
+      "toNode": "log-summary",
+      "toPin": "in:value"
+    },
+    {
+      "id": "d14",
+      "kind": "data",
+      "fromNode": "http-posts",
+      "fromPin": "out:value",
+      "toNode": "tap-posts",
+      "toPin": "in:value"
+    },
+    {
+      "id": "d-event-name",
+      "kind": "data",
+      "fromNode": "http-users",
+      "fromPin": "out:name",
+      "toNode": "emit-loaded",
+      "toPin": "in:userName"
+    },
+    {
+      "id": "d-event-log",
+      "kind": "data",
+      "fromNode": "on-loaded",
+      "fromPin": "out:userName",
+      "toNode": "log-event",
+      "toPin": "in:value"
+    }
+  ],
+  "viewport": { "x": 50, "y": 50, "zoom": 0.75 }
+}

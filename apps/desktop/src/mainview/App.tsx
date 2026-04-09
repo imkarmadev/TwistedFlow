@@ -302,8 +302,13 @@ export default function App() {
           onClose={() => setSettingsOpen(false)}
           onChanged={() => {
             void refreshProjectMeta();
-            // Also refresh the sidebar's project list so a renamed project
-            // shows the new name immediately without a manual reload.
+            void rpc!.request.listProjects({}).then(setProjects);
+          }}
+          onDeleted={() => {
+            setSettingsOpen(false);
+            setActiveProjectId(null);
+            setActiveFlowId(null);
+            setSelectedNode(null);
             void rpc!.request.listProjects({}).then(setProjects);
           }}
         />
