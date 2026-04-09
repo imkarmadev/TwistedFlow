@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TwistedRest — Visual API Workflow Builder</title>
+  <meta name="description" content="Build, chain, and debug HTTP request flows by wiring nodes on a canvas. Blueprint-style visual programming for APIs. macOS desktop app." />
+  <meta property="og:title" content="TwistedRest — Visual API Workflow Builder" />
+  <meta property="og:description" content="Build API workflows visually. Wire nodes like Unreal Engine Blueprints. macOS desktop app." />
+  <meta property="og:type" content="website" />
+  <link rel="icon" href="public/favicon.ico" sizes="any" />
+  <link rel="icon" type="image/png" sizes="192x192" href="public/icon-192.png" />
+  <link rel="apple-touch-icon" href="public/apple-touch-icon.png" />
+  <style>
+    /* ── Reset + tokens ────────────────────────────────────── */
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg: #0a0d14;
+      --bg-elevated: #11151f;
+      --bg-card: #161b2a;
+      --text: #e8e8ed;
+      --text-secondary: #8e8e93;
+      --text-muted: #636366;
+      --accent: #4cc2ff;
+      --accent-glow: rgba(76, 194, 255, 0.15);
+      --accent-border: rgba(76, 194, 255, 0.3);
+      --green: #2ecc71;
+      --pink: #ff5fb1;
+      --purple: #c177ff;
+      --orange: #ffa726;
+      --red: #ff4757;
+      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --mono: "SF Mono", "Fira Code", "Cascadia Code", ui-monospace, monospace;
+      --max-w: 1200px;
+    }
+
+    html {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      -webkit-font-smoothing: antialiased;
+      scroll-behavior: smooth;
+    }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ── Layout ────────────────────────────────────────────── */
+    .container {
+      max-width: var(--max-w);
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    section {
+      padding: 100px 0;
+    }
+
+    /* ── Nav ───────────────────────────────────────────────── */
+    nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      background: rgba(10, 13, 20, 0.85);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+
+    nav .container {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 64px;
+    }
+
+    .nav-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 700;
+      font-size: 18px;
+      color: var(--text);
+    }
+
+    .nav-brand img {
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 32px;
+      list-style: none;
+    }
+
+    .nav-links a {
+      color: var(--text-secondary);
+      font-size: 14px;
+      font-weight: 500;
+      transition: color 0.15s;
+    }
+
+    .nav-links a:hover { color: var(--text); text-decoration: none; }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 22px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      font-family: var(--font);
+      border: none;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #000;
+    }
+
+    .btn-primary:hover {
+      background: #6bd0ff;
+      text-decoration: none;
+      transform: translateY(-1px);
+      box-shadow: 0 8px 24px rgba(76, 194, 255, 0.25);
+    }
+
+    .btn-secondary {
+      background: rgba(255,255,255,0.06);
+      color: var(--text);
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255,255,255,0.1);
+      text-decoration: none;
+      transform: translateY(-1px);
+    }
+
+    /* ── Hero ──────────────────────────────────────────────── */
+    .hero {
+      padding: 180px 0 120px;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 800px;
+      height: 600px;
+      background: radial-gradient(ellipse at center, rgba(76, 194, 255, 0.08) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .hero-badge {
+      display: inline-block;
+      padding: 6px 16px;
+      border-radius: 100px;
+      background: var(--accent-glow);
+      border: 1px solid var(--accent-border);
+      color: var(--accent);
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 24px;
+    }
+
+    .hero h1 {
+      font-size: clamp(40px, 6vw, 72px);
+      font-weight: 800;
+      line-height: 1.1;
+      letter-spacing: -0.03em;
+      margin-bottom: 20px;
+    }
+
+    .hero h1 .highlight {
+      background: linear-gradient(135deg, var(--accent), var(--purple));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .hero p {
+      font-size: 20px;
+      color: var(--text-secondary);
+      max-width: 600px;
+      margin: 0 auto 40px;
+      line-height: 1.6;
+    }
+
+    .hero-actions {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .hero-visual {
+      margin-top: 80px;
+      position: relative;
+    }
+
+    .hero-visual .window {
+      max-width: 960px;
+      margin: 0 auto;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.08);
+      overflow: hidden;
+      box-shadow:
+        0 40px 80px rgba(0,0,0,0.5),
+        0 0 0 1px rgba(255,255,255,0.04);
+      background: var(--bg-elevated);
+      aspect-ratio: 16 / 10;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+
+    /* ── Features grid ────────────────────────────────────── */
+    .features {
+      background: var(--bg-elevated);
+      border-top: 1px solid rgba(255,255,255,0.04);
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+    }
+
+    .section-header {
+      text-align: center;
+      margin-bottom: 64px;
+    }
+
+    .section-header h2 {
+      font-size: 36px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 12px;
+    }
+
+    .section-header p {
+      font-size: 18px;
+      color: var(--text-secondary);
+      max-width: 540px;
+      margin: 0 auto;
+    }
+
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 24px;
+    }
+
+    .feature-card {
+      padding: 32px;
+      border-radius: 12px;
+      background: var(--bg-card);
+      border: 1px solid rgba(255,255,255,0.06);
+      transition: border-color 0.2s, transform 0.2s;
+    }
+
+    .feature-card:hover {
+      border-color: rgba(255,255,255,0.12);
+      transform: translateY(-2px);
+    }
+
+    .feature-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      margin-bottom: 16px;
+      font-weight: 700;
+      font-family: var(--mono);
+    }
+
+    .feature-card h3 {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .feature-card p {
+      font-size: 14px;
+      color: var(--text-secondary);
+      line-height: 1.6;
+    }
+
+    /* ── Nodes showcase ───────────────────────────────────── */
+    .nodes-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 12px;
+    }
+
+    .node-pill {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 14px 18px;
+      border-radius: 10px;
+      background: var(--bg-card);
+      border: 1px solid rgba(255,255,255,0.06);
+      font-size: 14px;
+      font-weight: 500;
+    }
+
+    .node-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 3px;
+      flex-shrink: 0;
+    }
+
+    /* ── CTA ───────────────────────────────────────────────── */
+    .cta {
+      text-align: center;
+      background: var(--bg-elevated);
+      border-top: 1px solid rgba(255,255,255,0.04);
+    }
+
+    .cta h2 {
+      font-size: 36px;
+      font-weight: 700;
+      margin-bottom: 16px;
+    }
+
+    .cta p {
+      font-size: 18px;
+      color: var(--text-secondary);
+      margin-bottom: 32px;
+    }
+
+    .cta-actions {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    /* ── Footer ────────────────────────────────────────────── */
+    footer {
+      padding: 48px 0;
+      border-top: 1px solid rgba(255,255,255,0.04);
+      text-align: center;
+    }
+
+    footer p {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    /* ── Responsive ────────────────────────────────────────── */
+    @media (max-width: 768px) {
+      section { padding: 64px 0; }
+      .hero { padding: 140px 0 80px; }
+      .nav-links { display: none; }
+      .features-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Nav -->
+  <nav>
+    <div class="container">
+      <div class="nav-brand">
+        <span>TwistedRest</span>
+      </div>
+      <ul class="nav-links">
+        <li><a href="#features">Features</a></li>
+        <li><a href="#nodes">Nodes</a></li>
+        <li><a href="https://github.com/imkarmadev/TwistedRest" target="_blank">GitHub</a></li>
+        <li><a href="https://github.com/imkarmadev/TwistedRest/releases" class="btn btn-primary" target="_blank">Download</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="container">
+      <div class="hero-badge">Open Source &middot; macOS</div>
+      <h1>
+        Wire APIs like<br />
+        <span class="highlight">Unreal Blueprints</span>
+      </h1>
+      <p>
+        Build, chain, and debug HTTP request flows visually.
+        No code for most workflows. A Function node when you need it.
+      </p>
+      <div class="hero-actions">
+        <a href="https://github.com/imkarmadev/TwistedRest/releases" class="btn btn-primary" target="_blank">
+          Download for macOS
+        </a>
+        <a href="https://github.com/imkarmadev/TwistedRest" class="btn btn-secondary" target="_blank">
+          View on GitHub
+        </a>
+      </div>
+
+      <div class="hero-visual">
+        <div class="window">
+          <img src="public/screenshot.png" alt="TwistedRest — visual API workflow builder with nodes, Match routing, events, and inspector" style="width:100%;height:100%;object-fit:cover;" />
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section class="features" id="features">
+    <div class="container">
+      <div class="section-header">
+        <h2>Built for API developers</h2>
+        <p>Everything you need to design, test, and debug complex API workflows — visually.</p>
+      </div>
+
+      <div class="features-grid">
+        <div class="feature-card">
+          <div class="feature-icon" style="background: rgba(76, 194, 255, 0.15); color: var(--accent);">{ }</div>
+          <h3>Blueprint-Style Canvas</h3>
+          <p>Drag nodes, wire pins, see data flow. Two edge types: white exec edges for control flow, colored data edges for typed values. Just like Unreal Engine.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon" style="background: rgba(46, 204, 113, 0.15); color: var(--green);">%</div>
+          <h3>Template Tokens</h3>
+          <p>Type <code style="color:var(--pink)">#{userId}</code> in any URL, header, or body field. Input pins appear automatically. Wire values from upstream responses.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon" style="background: rgba(193, 119, 255, 0.15); color: var(--purple);">Z</div>
+          <h3>Zod Schema Validation</h3>
+          <p>Define response schemas in Zod. Output pins generate from fields. Paste sample JSON to auto-infer. One-click fix from failed responses.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon" style="background: rgba(255, 167, 38, 0.15); color: var(--orange);">||</div>
+          <h3>Parallel & Sequential Loops</h3>
+          <p>ForEach nodes iterate arrays with body sub-chains. Sequential for ordered processing, parallel for speed. Break Object + Convert handle the types.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon" style="background: rgba(255, 95, 177, 0.15); color: var(--pink);">!</div>
+          <h3>Events & Routing</h3>
+          <p>Emit/On Event for decoupled pub/sub. Match node for switch/case routing on any value — including HTTP status codes. No spaghetti wiring.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon" style="background: rgba(255, 71, 87, 0.15); color: var(--red);">fn</div>
+          <h3>Function Escape Hatch</h3>
+          <p>When the visual model isn't enough, write a TypeScript transform. Typed inputs/outputs, sandboxed execution. UUID, date math, array filter — anything.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon" style="background: rgba(76, 194, 255, 0.15); color: var(--accent);">@</div>
+          <h3>Environments + Auth</h3>
+          <p>Per-env base URLs, headers, variables, and auth (Bearer, Basic, API Key, OAuth2 CC). Switch envs on the Start node. Dev/staging/prod in one flow.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon" style="background: rgba(46, 204, 113, 0.15); color: var(--green);">&gt;_</div>
+          <h3>Built-in Debugging</h3>
+          <p>Tap nodes show values inline. Log nodes print to the Console panel. Per-node status colors. Full request/response inspector. Stop button mid-run.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon" style="background: rgba(193, 119, 255, 0.15); color: var(--purple);">Q</div>
+          <h3>Smart Palette</h3>
+          <p>Right-click or press Space to search nodes. Drag a pin to empty canvas — palette filters to compatible types. Auto-wires on selection.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Nodes -->
+  <section id="nodes">
+    <div class="container">
+      <div class="section-header">
+        <h2>14 node types</h2>
+        <p>From simple HTTP calls to parallel iteration, event-driven branching, and custom transforms.</p>
+      </div>
+
+      <div class="nodes-grid">
+        <div class="node-pill"><div class="node-dot" style="background: var(--green);"></div> Start</div>
+        <div class="node-pill"><div class="node-dot" style="background: var(--accent);"></div> HTTP Request</div>
+        <div class="node-pill"><div class="node-dot" style="background: var(--orange);"></div> Match</div>
+        <div class="node-pill"><div class="node-dot" style="background: var(--pink);"></div> ForEach (seq)</div>
+        <div class="node-pill"><div class="node-dot" style="background: var(--red);"></div> ForEach (par)</div>
+        <div class="node-pill"><div class="node-dot" style="background: #fcd34d;"></div> Emit Event</div>
+        <div class="node-pill"><div class="node-dot" style="background: #fef3c7;"></div> On Event</div>
+        <div class="node-pill"><div class="node-dot" style="background: var(--purple);"></div> Env Var</div>
+        <div class="node-pill"><div class="node-dot" style="background: var(--orange);"></div> Break Object</div>
+        <div class="node-pill"><div class="node-dot" style="background: #d8b4fe;"></div> Make Object</div>
+        <div class="node-pill"><div class="node-dot" style="background: #99f6e4;"></div> Convert</div>
+        <div class="node-pill"><div class="node-dot" style="background: #93c5fd;"></div> Function</div>
+        <div class="node-pill"><div class="node-dot" style="background: #bae6fd;"></div> Tap</div>
+        <div class="node-pill"><div class="node-dot" style="background: #a5f3fc;"></div> Log</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="cta">
+    <div class="container">
+      <h2>Start twisting your REST APIs</h2>
+      <p>Free, open source, macOS native. Built with Tauri, React, and Rust.</p>
+      <div class="cta-actions">
+        <a href="https://github.com/imkarmadev/TwistedRest/releases" class="btn btn-primary" target="_blank">
+          Download for macOS
+        </a>
+        <a href="https://github.com/imkarmadev/TwistedRest" class="btn btn-secondary" target="_blank">
+          Star on GitHub
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <div class="container">
+      <p>TwistedRest &mdash; Open source, MIT licensed. Built by <a href="https://github.com/imkarmadev" target="_blank">imkarmadev</a>.</p>
+    </div>
+  </footer>
+
+</body>
+</html>
