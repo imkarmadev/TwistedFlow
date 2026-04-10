@@ -4,9 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>TwistedFlow — Visual Flow Engine</title>
-  <meta name="description" content="Build, chain, and debug HTTP request flows by wiring nodes on a canvas. macOS desktop app." />
+  <meta name="description" content="Visual flow engine — build APIs, servers, automations, and test suites by wiring nodes. Rust executor, WASM plugins, compile to standalone binaries." />
   <meta property="og:title" content="TwistedFlow — Visual Flow Engine" />
-  <meta property="og:description" content="Build API workflows visually. Wire nodes on a canvas. macOS desktop app." />
+  <meta property="og:description" content="Wire nodes, build flows, compile to binaries. 23 built-in nodes + WASM plugins. Desktop app + CLI." />
   <meta property="og:type" content="website" />
   <link rel="icon" href="public/favicon.ico" sizes="any" />
   <link rel="icon" type="image/png" sizes="192x192" href="public/icon-192.png" />
@@ -396,12 +396,12 @@
     <div class="container">
       <div class="hero-badge">Open Source &middot; macOS &middot; Linux</div>
       <h1>
-        Wire APIs like<br />
-        <span class="highlight">visual programming</span>
+        Visual flow engine<br />
+        <span class="highlight">for everything</span>
       </h1>
       <p>
-        Build, chain, and debug HTTP request flows visually.
-        No code for most workflows. A Function node when you need it.
+        Build APIs, servers, automations, and test suites by wiring nodes on a canvas.
+        Rust executor. WASM plugins. Compile flows to standalone binaries.
       </p>
       <div class="hero-actions">
         <a href="https://github.com/imkarmadev/TwistedFlow/releases" class="btn btn-primary" target="_blank">
@@ -424,8 +424,8 @@
   <section class="features" id="features">
     <div class="container">
       <div class="section-header">
-        <h2>Built for API developers</h2>
-        <p>Everything you need to design, test, and debug complex API workflows — visually.</p>
+        <h2>Built for builders</h2>
+        <p>HTTP clients, servers, system automations, test suites — all visual, all compiled to native binaries.</p>
       </div>
 
       <div class="features-grid">
@@ -461,26 +461,26 @@
 
         <div class="feature-card">
           <div class="feature-icon" style="background: rgba(255, 71, 87, 0.15); color: var(--red);">fn</div>
-          <h3>Function Escape Hatch</h3>
-          <p>When the visual model isn't enough, write a TypeScript transform. Typed inputs/outputs, sandboxed execution. UUID, date math, array filter — anything.</p>
+          <h3>WASM Plugins</h3>
+          <p>Write custom nodes in Rust, compile to .wasm, drop in the plugins folder. They appear in the palette automatically. Sandboxed, fast, cross-platform.</p>
         </div>
 
         <div class="feature-card">
           <div class="feature-icon" style="background: rgba(76, 194, 255, 0.15); color: var(--accent);">@</div>
-          <h3>Environments + Auth</h3>
-          <p>Per-env base URLs, headers, variables, and auth (Bearer, Basic, API Key, OAuth2 CC). Switch envs on the Start node. Dev/staging/prod in one flow.</p>
+          <h3>Environments (.env)</h3>
+          <p>Standard .env files — .env for default, .env.dev for dev, .env.prod for prod. Edit in the app or your editor. Git-native projects.</p>
         </div>
 
         <div class="feature-card">
           <div class="feature-icon" style="background: rgba(46, 204, 113, 0.15); color: var(--green);">&gt;_</div>
-          <h3>Built-in Debugging</h3>
-          <p>Tap nodes show values inline. Log nodes print to the Console panel. Per-node status colors. Full request/response inspector. Stop button mid-run.</p>
+          <h3>CLI + Build</h3>
+          <p><code>twistedflow-cli run flow.json</code> for headless execution. <code>twistedflow-cli build</code> compiles flows to standalone 20MB binaries. Ship anywhere.</p>
         </div>
 
         <div class="feature-card">
-          <div class="feature-icon" style="background: rgba(193, 119, 255, 0.15); color: var(--purple);">Q</div>
-          <h3>Smart Palette</h3>
-          <p>Right-click or press Space to search nodes. Drag a pin to empty canvas — palette filters to compatible types. Auto-wires on selection.</p>
+          <div class="feature-icon" style="background: rgba(193, 119, 255, 0.15); color: var(--purple);">!</div>
+          <h3>HTTP Server + Testing</h3>
+          <p>HTTP Listen starts a server as a process node. Assert and Assert Type nodes for test suites. Try/Catch for error handling. If/Else for branching.</p>
         </div>
       </div>
     </div>
@@ -490,25 +490,39 @@
   <section id="nodes">
     <div class="container">
       <div class="section-header">
-        <h2>14 node types</h2>
-        <p>From simple HTTP calls to parallel iteration, event-driven branching, and custom transforms.</p>
+        <h2>23 built-in nodes + WASM plugins</h2>
+        <p>Flow control, HTTP client &amp; server, system I/O, testing, variables — plus custom nodes via Rust WASM plugins.</p>
       </div>
 
       <div class="nodes-grid">
         <div class="node-pill"><div class="node-dot" style="background: var(--green);"></div> Start</div>
         <div class="node-pill"><div class="node-dot" style="background: var(--accent);"></div> HTTP Request</div>
+        <div class="node-pill"><div class="node-dot" style="background: var(--accent);"></div> HTTP Listen</div>
+        <div class="node-pill"><div class="node-dot" style="background: var(--accent);"></div> Send Response</div>
+        <div class="node-pill"><div class="node-dot" style="background: var(--accent);"></div> Route Match</div>
         <div class="node-pill"><div class="node-dot" style="background: var(--orange);"></div> Match</div>
+        <div class="node-pill"><div class="node-dot" style="background: var(--orange);"></div> If / Else</div>
+        <div class="node-pill"><div class="node-dot" style="background: var(--orange);"></div> Try / Catch</div>
         <div class="node-pill"><div class="node-dot" style="background: var(--pink);"></div> ForEach (seq)</div>
         <div class="node-pill"><div class="node-dot" style="background: var(--red);"></div> ForEach (par)</div>
         <div class="node-pill"><div class="node-dot" style="background: #fcd34d;"></div> Emit Event</div>
         <div class="node-pill"><div class="node-dot" style="background: #fef3c7;"></div> On Event</div>
         <div class="node-pill"><div class="node-dot" style="background: var(--purple);"></div> Env Var</div>
+        <div class="node-pill"><div class="node-dot" style="background: var(--purple);"></div> Set Variable</div>
+        <div class="node-pill"><div class="node-dot" style="background: var(--purple);"></div> Get Variable</div>
         <div class="node-pill"><div class="node-dot" style="background: var(--orange);"></div> Break Object</div>
         <div class="node-pill"><div class="node-dot" style="background: #d8b4fe;"></div> Make Object</div>
         <div class="node-pill"><div class="node-dot" style="background: #99f6e4;"></div> Convert</div>
-        <div class="node-pill"><div class="node-dot" style="background: #93c5fd;"></div> Function</div>
         <div class="node-pill"><div class="node-dot" style="background: #bae6fd;"></div> Tap</div>
         <div class="node-pill"><div class="node-dot" style="background: #a5f3fc;"></div> Log</div>
+        <div class="node-pill"><div class="node-dot" style="background: #a5f3fc;"></div> Print</div>
+        <div class="node-pill"><div class="node-dot" style="background: #93c5fd;"></div> Shell Exec</div>
+        <div class="node-pill"><div class="node-dot" style="background: #93c5fd;"></div> File Read</div>
+        <div class="node-pill"><div class="node-dot" style="background: #93c5fd;"></div> File Write</div>
+        <div class="node-pill"><div class="node-dot" style="background: #93c5fd;"></div> Sleep</div>
+        <div class="node-pill"><div class="node-dot" style="background: #f87171;"></div> Exit</div>
+        <div class="node-pill"><div class="node-dot" style="background: #4ade80;"></div> Assert</div>
+        <div class="node-pill"><div class="node-dot" style="background: #4ade80;"></div> Assert Type</div>
       </div>
     </div>
   </section>
@@ -516,8 +530,8 @@
   <!-- CTA -->
   <section class="cta">
     <div class="container">
-      <h2>Start twisting your REST APIs</h2>
-      <p>Free, open source, macOS native. Built with Tauri, React, and Rust.</p>
+      <h2>Start building flows</h2>
+      <p>Free, open source. Desktop app + CLI + compile to binary. Built with Tauri, React, and Rust.</p>
       <div class="cta-actions">
         <a href="https://github.com/imkarmadev/TwistedFlow/releases" class="btn btn-primary" target="_blank">
           Download (macOS / Linux)
