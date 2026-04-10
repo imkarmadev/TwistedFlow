@@ -16,6 +16,11 @@ interface SystemNodeConfig {
   subtitle?: string;
   inputs: Array<{ id: string; label: string; type: DataType }>;
   outputs: Array<{ id: string; label: string; type: DataType }>;
+  /** Custom exec-out handle and label (default: "exec-out" / "exec") */
+  execOutHandle?: string;
+  execOutLabel?: string;
+  /** If true, no exec pins at all (pure data node) */
+  noExec?: boolean;
 }
 
 const NODE_CONFIGS: Record<string, (data: Record<string, unknown>) => SystemNodeConfig> = {
@@ -71,6 +76,42 @@ const NODE_CONFIGS: Record<string, (data: Record<string, unknown>) => SystemNode
     inputs: [{ id: "in:code", label: "code", type: "number" }],
     outputs: [],
   }),
+  httpListen: (data) => ({
+    badge: "HTTP",
+    label: "HTTP Listen",
+    subtitle: `:${data.port ?? 3000}`,
+    inputs: [],
+    outputs: [
+      { id: "out:method", label: "method", type: "string" },
+      { id: "out:path", label: "path", type: "string" },
+      { id: "out:query", label: "query", type: "string" },
+      { id: "out:headers", label: "headers", type: "object" },
+      { id: "out:body", label: "body", type: "unknown" },
+    ],
+    execOutLabel: "request",
+    execOutHandle: "exec-request",
+  }),
+  sendResponse: () => ({
+    badge: "HTTP",
+    label: "Send Response",
+    subtitle: "reply to client",
+    inputs: [
+      { id: "in:status", label: "status", type: "number" },
+      { id: "in:body", label: "body", type: "unknown" },
+    ],
+    outputs: [],
+  }),
+  routeMatch: (data) => ({
+    badge: "HTTP",
+    label: "Route Match",
+    subtitle: `${data.method ?? "GET"} ${data.path ?? "/"}`,
+    inputs: [
+      { id: "in:method", label: "method", type: "string" },
+      { id: "in:path", label: "path", type: "string" },
+    ],
+    outputs: [{ id: "out:matched", label: "matched", type: "boolean" }],
+    noExec: true,
+  }),
 };
 
 export function SystemNode({ id, data, selected, type }: NodeProps) {
@@ -103,16 +144,18 @@ export function SystemNode({ id, data, selected, type }: NodeProps) {
       )}
 
       {/* Exec pins */}
-      <div className={s.pinRow}>
-        <div className={s.pinLabelLeft}>
-          <Handle id="exec-in" type="target" position={Position.Left} className={`${s.pin} ${s.pinExec}`} />
-          <span className={s.pinName}>exec</span>
+      {!config.noExec && (
+        <div className={s.pinRow}>
+          <div className={s.pinLabelLeft}>
+            <Handle id="exec-in" type="target" position={Position.Left} className={`${s.pin} ${s.pinExec}`} />
+            <span className={s.pinName}>exec</span>
+          </div>
+          <div className={s.pinLabelRight}>
+            <span className={s.pinName}>{config.execOutLabel ?? "exec"}</span>
+            <Handle id={config.execOutHandle ?? "exec-out"} type="source" position={Position.Right} className={`${s.pin} ${s.pinExec}`} />
+          </div>
         </div>
-        <div className={s.pinLabelRight}>
-          <span className={s.pinName}>exec</span>
-          <Handle id="exec-out" type="source" position={Position.Right} className={`${s.pin} ${s.pinExec}`} />
-        </div>
-      </div>
+      )}
 
       {/* Data pins */}
       {Array.from({ length: Math.max(config.inputs.length, config.outputs.length) }, (_, i) => {

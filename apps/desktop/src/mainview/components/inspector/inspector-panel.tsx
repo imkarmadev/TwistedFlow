@@ -136,6 +136,32 @@ export function InspectorPanel({
             data={(node.data ?? {}) as Record<string, unknown>}
             onChange={(d) => onChange(node.id, d)}
           />
+        ) : node.type === "httpListen" ? (
+          <SystemFieldEditor
+            data={(node.data ?? {}) as Record<string, unknown>}
+            onChange={(d) => onChange(node.id, d)}
+            fields={[
+              { key: "port", label: "Port", placeholder: "3000", type: "number" },
+              { key: "maxRequests", label: "Max Requests (0 = unlimited)", placeholder: "0", type: "number" },
+            ]}
+          />
+        ) : node.type === "sendResponse" ? (
+          <SystemFieldEditor
+            data={(node.data ?? {}) as Record<string, unknown>}
+            onChange={(d) => onChange(node.id, d)}
+            fields={[
+              { key: "status", label: "Status Code", placeholder: "200", type: "number" },
+            ]}
+          />
+        ) : node.type === "routeMatch" ? (
+          <SystemFieldEditor
+            data={(node.data ?? {}) as Record<string, unknown>}
+            onChange={(d) => onChange(node.id, d)}
+            fields={[
+              { key: "method", label: "Method (* = any)", placeholder: "GET" },
+              { key: "path", label: "Path (* = any)", placeholder: "/health" },
+            ]}
+          />
         ) : node.type === "shellExec" ? (
           <SystemFieldEditor
             data={(node.data ?? {}) as Record<string, unknown>}
