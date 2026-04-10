@@ -1,5 +1,5 @@
 {
-  "name": "@twistedrest/core",
+  "name": "@twistedflow/core",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -18,7 +18,7 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@twistedrest/shared": "workspace:*",
+    "@twistedflow/shared": "workspace:*",
     "zod": "^3.24.0"
   },
   "devDependencies": {

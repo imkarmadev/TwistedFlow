@@ -1,5 +1,5 @@
 {
-  "twistedrest": 1,
+  "twistedflow": 1,
   "name": "JSONPlaceholder Demo",
   "nodes": [
     {

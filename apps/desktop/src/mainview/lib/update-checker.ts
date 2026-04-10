@@ -9,7 +9,7 @@
  * No auto-download, no signing, no binary replacement. Just a nudge.
  */
 
-const REPO = "imkarmadev/TwistedRest";
+const REPO = "imkarmadev/TwistedFlow";
 const CURRENT_VERSION = "0.3.0"; // keep in sync with tauri.conf.json
 
 interface UpdateInfo {

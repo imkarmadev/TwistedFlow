@@ -130,6 +130,9 @@
   justify-content: center;
   width: 22px;
   height: 22px;
+  padding: 0;
+  border: none;
+  background: none;
   color: var(--text-secondary);
   border-radius: 4px;
   flex-shrink: 0;
@@ -266,4 +269,128 @@
   padding: 12px 10px;
   font-size: 12px;
   color: var(--text-muted);
+}
+
+/* ── Project pill ──────────────────────────────────────────────────────────── */
+.projectPill {
+  margin: 0 10px 4px;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  background: var(--glass);
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Open / Create buttons ─────────────────────────────────────────────────── */
+.projectActions {
+  display: flex;
+  gap: 6px;
+  padding: 6px 10px 4px;
+}
+
+.projectActionBtn {
+  flex: 1;
+  padding: 5px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+  white-space: nowrap;
+}
+
+.projectActionBtn:hover {
+  background: var(--glass);
+  color: var(--text-primary);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.projectActionBtnActive {
+  background: var(--accent-bg);
+  color: var(--accent);
+  border-color: var(--accent-border);
+}
+
+.projectActionBtnActive:hover {
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+
+/* ── Inline panel (Open / Create forms) ────────────────────────────────────── */
+.panel {
+  margin: 4px 10px 6px;
+  padding: 10px;
+  background: var(--bg-float);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.panelLabel {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.panelActions {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.panelBtn {
+  flex: 1;
+  padding: 5px 0;
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: opacity 120ms ease;
+}
+
+.panelBtn:hover {
+  opacity: 0.85;
+}
+
+.panelBtnGhost {
+  background: var(--glass);
+  color: var(--text-secondary);
+}
+
+.panelBtnGhost:hover {
+  opacity: 1;
+  background: var(--glass-hover);
+  color: var(--text-primary);
+}
+
+/* ── Section divider + label ───────────────────────────────────────────────── */
+.divider {
+  margin: 6px 10px;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.06);
+  flex-shrink: 0;
+}
+
+.sectionLabel {
+  padding: 0 16px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  flex-shrink: 0;
 }

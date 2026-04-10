@@ -1,4 +1,4 @@
-//! SQLite persistence for TwistedRest.
+//! SQLite persistence for TwistedFlow.
 //!
 //! Stored at the platform's app-data directory (resolved by Tauri at runtime
 //! and passed in to `init`). Schema is identical to the Phase 0 bun:sqlite

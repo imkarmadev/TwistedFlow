@@ -1,302 +1,314 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { open as pickFolder } from "@tauri-apps/plugin-dialog";
 import clsx from "clsx";
-import type { ProjectItem } from "../../App";
-import type { RPC } from "../../use-tauri";
-import { exportFlow, importFlow } from "../../lib/flow-io";
 import s from "./sidebar.module.css";
 
-/** Duplicate a flow: fetch it, create a new one, save with same data. */
-async function duplicateFlow(rpc: RPC, flowId: string, projectId: string) {
-  const flow = await rpc.request.getFlow({ id: flowId });
-  if (!flow) return null;
-  const created = await rpc.request.createFlow({
-    projectId,
-    name: `${flow.name} (copy)`,
-  });
-  if (!created.id) return null;
-  const vp = (flow as unknown as Record<string, unknown>).viewport as
-    | { x: number; y: number; zoom: number }
-    | undefined;
-  await rpc.request.saveFlow({
-    id: created.id,
-    nodes: flow.nodes,
-    edges: flow.edges,
-    viewport: vp,
-  });
-  return created.id;
-}
-
 interface FlowItem {
-  id: string;
   name: string;
+  filename: string;
 }
 
 interface SidebarProps {
-  rpc: RPC | null;
-  projects: ProjectItem[];
-  activeProjectId: string | null;
-  activeFlowId: string | null;
-  onSelectProject: (id: string) => void;
-  onSelectFlow: (flowId: string) => void;
-  onCreateProject: (name: string) => void;
+  activeProjectPath: string | null;
+  activeProjectName: string | null;
+  activeFlowFilename: string | null;
+  onOpenProject: (path: string) => void;
+  onCreateProject: (parentPath: string, name: string) => void;
+  onSelectFlow: (filename: string) => void;
   onOpenSettings: () => void;
 }
 
+// ── Recent projects (localStorage) ──────────────────────────────────
+
+const RECENTS_KEY = "twistedflow:recentProjects";
+const MAX_RECENTS = 8;
+
+interface RecentProject {
+  path: string;
+  name: string;
+}
+
+function getRecents(): RecentProject[] {
+  try {
+    return JSON.parse(localStorage.getItem(RECENTS_KEY) ?? "[]");
+  } catch {
+    return [];
+  }
+}
+
+function pushRecent(path: string, name: string) {
+  const list = getRecents().filter((r) => r.path !== path);
+  list.unshift({ path, name });
+  localStorage.setItem(RECENTS_KEY, JSON.stringify(list.slice(0, MAX_RECENTS)));
+}
+
+function removeRecent(path: string) {
+  const list = getRecents().filter((r) => r.path !== path);
+  localStorage.setItem(RECENTS_KEY, JSON.stringify(list));
+}
+
+// ── Main sidebar ────────────────────────────────────────────────────
+
 export function Sidebar({
-  rpc,
-  projects,
-  activeProjectId,
-  activeFlowId,
-  onSelectProject,
-  onSelectFlow,
+  activeProjectPath,
+  activeProjectName,
+  activeFlowFilename,
+  onOpenProject,
   onCreateProject,
+  onSelectFlow,
   onOpenSettings,
 }: SidebarProps) {
-  const [flowsByProject, setFlowsByProject] = useState<Record<string, FlowItem[]>>({});
-  const [creatingProject, setCreatingProject] = useState(false);
-  const [creatingFlowFor, setCreatingFlowFor] = useState<string | null>(null);
+  const [flows, setFlows] = useState<FlowItem[]>([]);
+  const [creatingFlow, setCreatingFlow] = useState(false);
   const [draft, setDraft] = useState("");
   const [confirmDeleteFlow, setConfirmDeleteFlow] = useState<string | null>(null);
+  const [recents, setRecents] = useState<RecentProject[]>(getRecents);
+  const [showCreateName, setShowCreateName] = useState(false);
+  const [createName, setCreateName] = useState("");
 
-  const refreshFlows = async (projId: string) => {
-    if (!rpc) return;
-    const list = await rpc.request.listFlows({ projectId: projId });
-    setFlowsByProject((prev) => ({ ...prev, [projId]: list }));
-  };
-
-  // Refetch flows when the active project changes OR when the active flow
-  // changes (which happens after App auto-creates the "main" flow for a
-  // newly-created project — without this dep, the sidebar's fetch races
-  // App's create and shows an empty list).
+  // Track recent when project opens
   useEffect(() => {
-    if (!rpc || !activeProjectId) return;
-    void rpc.request.listFlows({ projectId: activeProjectId }).then((list) => {
-      setFlowsByProject((prev) => ({ ...prev, [activeProjectId]: list }));
-    });
-  }, [rpc, activeProjectId, activeFlowId]);
+    if (activeProjectPath && activeProjectName) {
+      pushRecent(activeProjectPath, activeProjectName);
+      setRecents(getRecents());
+    }
+  }, [activeProjectPath, activeProjectName]);
 
-  const submitProject = () => {
-    const name = draft.trim();
-    if (!name) {
-      setCreatingProject(false);
+  // Load flows
+  useEffect(() => {
+    if (!activeProjectPath) {
+      setFlows([]);
       return;
     }
-    onCreateProject(name);
-    setDraft("");
-    setCreatingProject(false);
+    invoke<FlowItem[]>("list_flows", { projectPath: activeProjectPath })
+      .then(setFlows)
+      .catch(() => setFlows([]));
+  }, [activeProjectPath, activeFlowFilename]);
+
+  const refreshFlows = useCallback(() => {
+    if (!activeProjectPath) return;
+    invoke<FlowItem[]>("list_flows", { projectPath: activeProjectPath })
+      .then(setFlows)
+      .catch(() => setFlows([]));
+  }, [activeProjectPath]);
+
+  // ── Handlers ──────────────────────────────────────────────────────
+
+  const handleOpenProject = async () => {
+    const selected = await pickFolder({ directory: true, title: "Open TwistedFlow Project" });
+    if (selected && typeof selected === "string") {
+      onOpenProject(selected);
+    }
   };
 
-  const submitFlow = async () => {
-    const name = draft.trim();
-    if (!name || !rpc || !creatingFlowFor) {
-      setCreatingFlowFor(null);
-      setDraft("");
-      return;
+  const handleCreateProject = async () => {
+    const selected = await pickFolder({ directory: true, title: "Choose parent folder for new project" });
+    if (selected && typeof selected === "string") {
+      setShowCreateName(true);
+      setCreateName("");
+      // Store parent path temporarily
+      (window as unknown as Record<string, string>).__tfCreateParent = selected;
     }
-    const created = await rpc.request.createFlow({ projectId: creatingFlowFor, name });
-    if (created.id) {
-      const list = await rpc.request.listFlows({ projectId: creatingFlowFor });
-      setFlowsByProject((prev) => ({ ...prev, [creatingFlowFor]: list }));
-      onSelectFlow(created.id);
-    }
-    setDraft("");
-    setCreatingFlowFor(null);
   };
+
+  const submitCreateProject = () => {
+    const parent = (window as unknown as Record<string, string>).__tfCreateParent;
+    const name = createName.trim();
+    setShowCreateName(false);
+    setCreateName("");
+    if (parent && name) {
+      onCreateProject(parent, name);
+    }
+  };
+
+  const submitNewFlow = async () => {
+    const name = draft.trim();
+    setCreatingFlow(false);
+    setDraft("");
+    if (!name || !activeProjectPath) return;
+    try {
+      const created = await invoke<{ filename: string }>("create_flow", {
+        projectPath: activeProjectPath,
+        name,
+      });
+      refreshFlows();
+      onSelectFlow(created.filename);
+    } catch (e) {
+      console.error("create_flow", e);
+    }
+  };
+
+  const deleteFlow = async (filename: string) => {
+    if (!activeProjectPath) return;
+    await invoke("delete_flow", { projectPath: activeProjectPath, filename });
+    setConfirmDeleteFlow(null);
+    refreshFlows();
+    if (activeFlowFilename === filename) onSelectFlow("");
+  };
+
+  const handleRemoveRecent = (path: string) => {
+    removeRecent(path);
+    setRecents(getRecents());
+  };
+
+  // ── Render ────────────────────────────────────────────────────────
 
   return (
     <aside className={s.sidebar}>
-      {/* Drag region behind the OS traffic lights — empty so all clicks
-          fall through to Tauri's window drag handler. */}
       <div data-tauri-drag-region className={s.dragHandle} />
 
+      {/* Header */}
       <div className={s.header}>
-        <span className={s.headerLabel}>Projects</span>
-        <button
-          className={s.addBtn}
-          onClick={() => setCreatingProject(true)}
-          aria-label="New project"
-        >
-          +
+        <span className={s.headerLabel}>Project</span>
+        {activeProjectPath && (
+          <button className={s.gear} onClick={onOpenSettings} title="Settings">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+            </svg>
+          </button>
+        )}
+      </div>
+
+      {/* Active project pill */}
+      {activeProjectName ? (
+        <div className={s.projectPill}>{activeProjectName}</div>
+      ) : null}
+
+      {/* Open / Create buttons */}
+      <div className={s.projectActions}>
+        <button className={s.projectActionBtn} onClick={handleOpenProject}>
+          Open Project
+        </button>
+        <button className={s.projectActionBtn} onClick={handleCreateProject}>
+          Create Project
         </button>
       </div>
 
-      <div className={s.list}>
-        {projects.map((p) => {
-          const isActive = p.id === activeProjectId;
-          const flows = flowsByProject[p.id] ?? [];
-          return (
-            <div key={p.id} className={s.projectGroup}>
-              <button
-                className={clsx(s.projectItem, isActive && s.projectItemActive)}
-                onClick={() => onSelectProject(p.id)}
-              >
-                <span className={s.chevron}>{isActive ? "▾" : "▸"}</span>
-                <span className={s.projectName}>{p.name}</span>
-                {isActive && (
-                  <span
-                    className={s.gear}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onOpenSettings();
-                    }}
-                    title="Project settings"
-                  >
-                    <svg
-                      width="14"
-                      height="14"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <circle cx="12" cy="12" r="3" />
-                      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
-                    </svg>
-                  </span>
-                )}
-              </button>
-
-              {isActive && (
-                <div className={s.flowList}>
-                  {flows.map((f) => (
-                    <div key={f.id} className={s.flowRow}>
-                      <button
-                        className={clsx(s.flowItem, f.id === activeFlowId && s.flowItemActive)}
-                        onClick={() => onSelectFlow(f.id)}
-                      >
-                        {f.name}
-                      </button>
-                      {rpc && (
-                        <div className={s.flowIcons}>
-                          <span
-                            className={s.flowIcon}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              void duplicateFlow(rpc, f.id, p.id).then((newId) => {
-                                if (newId) {
-                                  void refreshFlows(p.id);
-                                  onSelectFlow(newId);
-                                }
-                              });
-                            }}
-                            title="Duplicate flow"
-                          >
-                            ⧉
-                          </span>
-                          <span
-                            className={s.flowIcon}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              void exportFlow(rpc, f.id);
-                            }}
-                            title="Export flow as JSON"
-                          >
-                            ↓
-                          </span>
-                          <span
-                            className={clsx(
-                              s.flowIcon,
-                              confirmDeleteFlow === f.id && s.flowIconDanger,
-                            )}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (confirmDeleteFlow !== f.id) {
-                                setConfirmDeleteFlow(f.id);
-                                setTimeout(() => setConfirmDeleteFlow(null), 3000);
-                                return;
-                              }
-                              void rpc.request.deleteFlow({ id: f.id }).then(() => {
-                                setConfirmDeleteFlow(null);
-                                void refreshFlows(p.id);
-                                if (activeFlowId === f.id) onSelectFlow("");
-                              });
-                            }}
-                            title={
-                              confirmDeleteFlow === f.id
-                                ? "Click again to delete"
-                                : "Delete flow"
-                            }
-                          >
-                            {confirmDeleteFlow === f.id ? "!" : "×"}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-
-                  {creatingFlowFor === p.id ? (
-                    <input
-                      autoFocus
-                      className={s.input}
-                      value={draft}
-                      onChange={(e) => setDraft(e.target.value)}
-                      onBlur={submitFlow}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") void submitFlow();
-                        if (e.key === "Escape") {
-                          setDraft("");
-                          setCreatingFlowFor(null);
-                        }
-                      }}
-                      placeholder="Flow name"
-                    />
-                  ) : (
-                    <div className={s.flowActions}>
-                      <button
-                        className={s.addFlow}
-                        onClick={() => {
-                          setCreatingFlowFor(p.id);
-                          setDraft("");
-                        }}
-                      >
-                        + new flow
-                      </button>
-                      <button
-                        className={s.addFlow}
-                        onClick={async () => {
-                          if (!rpc) return;
-                          const newId = await importFlow(rpc, p.id);
-                          if (newId) {
-                            const list = await rpc.request.listFlows({ projectId: p.id });
-                            setFlowsByProject((prev) => ({ ...prev, [p.id]: list }));
-                            onSelectFlow(newId);
-                          }
-                        }}
-                      >
-                        + import
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          );
-        })}
-
-        {creatingProject && (
+      {/* Create project name input */}
+      {showCreateName && (
+        <div className={s.panel}>
+          <div className={s.panelLabel}>Project name</div>
           <input
             autoFocus
             className={s.input}
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onBlur={submitProject}
+            value={createName}
+            onChange={(e) => setCreateName(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter") submitProject();
-              if (e.key === "Escape") {
-                setDraft("");
-                setCreatingProject(false);
-              }
+              if (e.key === "Enter") submitCreateProject();
+              if (e.key === "Escape") setShowCreateName(false);
             }}
-            placeholder="Project name"
+            placeholder="my-project"
           />
-        )}
+          <div className={s.panelActions}>
+            <button className={s.panelBtn} onClick={submitCreateProject}>Create</button>
+            <button className={clsx(s.panelBtn, s.panelBtnGhost)} onClick={() => setShowCreateName(false)}>Cancel</button>
+          </div>
+        </div>
+      )}
 
-        {!creatingProject && projects.length === 0 && (
-          <div className={s.emptyHint}>No projects yet</div>
-        )}
-      </div>
+      {/* Recent projects (only when no project is open) */}
+      {!activeProjectPath && recents.length > 0 && (
+        <>
+          <div className={s.divider} />
+          <div className={s.sectionLabel}>Recent</div>
+          <div className={s.list}>
+            {recents.map((r) => (
+              <div key={r.path} className={s.flowRow}>
+                <button
+                  className={s.flowItem}
+                  onClick={() => onOpenProject(r.path)}
+                  title={r.path}
+                >
+                  {r.name}
+                </button>
+                <div className={s.flowIcons}>
+                  <span
+                    className={s.flowIcon}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleRemoveRecent(r.path);
+                    }}
+                    title="Remove from recents"
+                  >
+                    ×
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* Flows section */}
+      {activeProjectPath && (
+        <>
+          <div className={s.divider} />
+          <div className={s.sectionLabel}>Flows</div>
+
+          <div className={s.list}>
+            {flows.length === 0 && !creatingFlow && (
+              <div className={s.emptyHint}>No flows yet.</div>
+            )}
+
+            {flows.map((f) => (
+              <div key={f.filename} className={s.flowRow}>
+                <button
+                  className={clsx(s.flowItem, f.filename === activeFlowFilename && s.flowItemActive)}
+                  onClick={() => onSelectFlow(f.filename)}
+                >
+                  {f.name}
+                </button>
+                <div className={s.flowIcons}>
+                  <span
+                    className={clsx(s.flowIcon, confirmDeleteFlow === f.filename && s.flowIconDanger)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (confirmDeleteFlow !== f.filename) {
+                        setConfirmDeleteFlow(f.filename);
+                        setTimeout(() => setConfirmDeleteFlow(null), 3000);
+                        return;
+                      }
+                      void deleteFlow(f.filename);
+                    }}
+                    title={confirmDeleteFlow === f.filename ? "Click again to confirm" : "Delete flow"}
+                  >
+                    {confirmDeleteFlow === f.filename ? "!" : "×"}
+                  </span>
+                </div>
+              </div>
+            ))}
+
+            {creatingFlow && (
+              <input
+                autoFocus
+                className={s.input}
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onBlur={() => void submitNewFlow()}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void submitNewFlow();
+                  if (e.key === "Escape") {
+                    setDraft("");
+                    setCreatingFlow(false);
+                  }
+                }}
+                placeholder="Flow name"
+              />
+            )}
+
+            {!creatingFlow && (
+              <button
+                className={s.addFlow}
+                onClick={() => { setCreatingFlow(true); setDraft(""); }}
+              >
+                + new flow
+              </button>
+            )}
+          </div>
+        </>
+      )}
     </aside>
   );
 }

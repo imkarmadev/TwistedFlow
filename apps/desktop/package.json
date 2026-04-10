@@ -1,8 +1,8 @@
 {
-  "name": "@twistedrest/desktop",
+  "name": "@twistedflow/desktop",
   "version": "0.3.0",
   "private": true,
-  "description": "TwistedRest — visual API workflow builder",
+  "description": "TwistedFlow — visual flow engine",
   "scripts": {
     "dev": "tauri dev",
     "tauri": "tauri",
@@ -14,14 +14,16 @@
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
     "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-dialog": "^2.7.0",
     "@tauri-apps/plugin-opener": "^2",
-    "@twistedrest/core": "workspace:*",
-    "@twistedrest/shared": "workspace:*",
+    "@twistedflow/core": "workspace:*",
+    "@twistedflow/shared": "workspace:*",
     "@xyflow/react": "^12.0.0",
     "clsx": "^2.1.1",
     "monaco-editor": "^0.55.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "sucrase": "^3.35.1",
     "zod": "^3.24.0"
   },
   "devDependencies": {

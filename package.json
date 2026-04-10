@@ -1,5 +1,5 @@
 {
-  "name": "twistedrest",
+  "name": "twistedflow",
   "private": true,
   "workspaces": [
     "apps/*",

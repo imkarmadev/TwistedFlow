@@ -9,7 +9,7 @@
  *   <Handle className={`${s.pin} ${pinClass(s, "number")}`} />
  */
 
-import type { DataType } from "@twistedrest/core";
+import type { DataType } from "@twistedflow/core";
 
 const TYPE_TO_CLASS: Record<DataType, string> = {
   string: "pinString",

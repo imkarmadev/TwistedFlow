@@ -34,7 +34,7 @@ pub struct HttpResponse {
 #[tauri::command]
 pub async fn http_request(req: HttpRequest) -> Result<HttpResponse, String> {
     let client = reqwest::Client::builder()
-        .user_agent("TwistedRest/0.1")
+        .user_agent("TwistedFlow/0.1")
         .build()
         .map_err(|e| e.to_string())?;
 
@@ -90,7 +90,7 @@ pub async fn oauth2_client_credentials(
     scopes: String,
 ) -> Result<OAuth2TokenResult, String> {
     let client = reqwest::Client::builder()
-        .user_agent("TwistedRest/0.1")
+        .user_agent("TwistedFlow/0.1")
         .build()
         .map_err(|e| e.to_string())?;
 
@@ -213,7 +213,7 @@ pub async fn oauth2_authorize(
     }
 
     // Send success page to browser
-    let html = "<html><body style='font-family:-apple-system,system-ui,sans-serif;text-align:center;padding:80px;background:#0a0d14;color:#e8e8ed'><h1 style='color:#4cc2ff'>Authorized!</h1><p style='color:#8e8e93'>You can close this tab and return to TwistedRest.</p></body></html>";
+    let html = "<html><body style='font-family:-apple-system,system-ui,sans-serif;text-align:center;padding:80px;background:#0a0d14;color:#e8e8ed'><h1 style='color:#4cc2ff'>Authorized!</h1><p style='color:#8e8e93'>You can close this tab and return to TwistedFlow.</p></body></html>";
     let response = format!(
         "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
         html.len(),
@@ -226,7 +226,7 @@ pub async fn oauth2_authorize(
 
     // 5. Exchange code for tokens
     let client = reqwest::Client::builder()
-        .user_agent("TwistedRest/0.1")
+        .user_agent("TwistedFlow/0.1")
         .build()
         .map_err(|e| e.to_string())?;
 

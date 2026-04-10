@@ -25,7 +25,7 @@ import {
   type NodeProps,
 } from "@xyflow/react";
 import clsx from "clsx";
-import type { DataType } from "@twistedrest/core";
+import type { DataType } from "@twistedflow/core";
 import s from "./node.module.css";
 import { getInputPinSourceType } from "../../../lib/schema-resolution";
 import { useFlowExec } from "../../../lib/exec-context";

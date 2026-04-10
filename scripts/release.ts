@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * TwistedRest release script.
+ * TwistedFlow release script.
  *
  * Usage:
  *   bun run release patch    # 0.1.1 → 0.1.2

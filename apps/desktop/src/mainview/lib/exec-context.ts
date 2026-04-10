@@ -6,14 +6,23 @@
  * HttpRequest node's status border) consume this context via
  * `useFlowExec()` so they don't need props plumbed through React Flow.
  *
- * Status state lives here in React state — never persisted to SQLite.
- * Project metadata + environments are also surfaced so the Start node
- * can render the env dropdown.
+ * Status state lives here in React state — never persisted to disk.
+ * Environments are surfaced so the Start node can render the env dropdown.
  */
 
 import { createContext, useContext } from "react";
-import type { NodeStatus } from "@twistedrest/core";
-import type { ProjectDetail, Environment } from "../use-tauri";
+import type { NodeStatus } from "@twistedflow/core";
+
+export interface EnvVar {
+  key: string;
+  value: string;
+}
+
+export interface ProjectEnvironment {
+  name: string;
+  filename: string;
+  vars: EnvVar[];
+}
 
 export interface FlowExecContextValue {
   run: () => void;
@@ -27,17 +36,15 @@ export interface FlowExecContextValue {
   /** True while a flow run is in progress. */
   running: boolean;
 
-  /** Active project metadata (base URL, default headers). */
-  project: ProjectDetail | null;
   /** Environments belonging to the active project. */
-  environments: Environment[];
+  environments: ProjectEnvironment[];
   /**
    * The environment currently selected on the Start node, or null if
    * no Start node exists or none is selected. EnvVar nodes validate
    * their varKey against this env's vars list and render red if the
    * key is missing.
    */
-  activeEnvironment: Environment | null;
+  activeEnvironment: ProjectEnvironment | null;
 
   /** True when the flow is structurally valid and can be executed. */
   canRun: boolean;
@@ -52,7 +59,6 @@ export const FlowExecContext = createContext<FlowExecContextValue>({
   results: {},
   errors: {},
   running: false,
-  project: null,
   environments: [],
   activeEnvironment: null,
   canRun: false,

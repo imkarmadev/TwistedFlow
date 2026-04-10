@@ -1,0 +1,240 @@
+{
+  "twistedflow": 1,
+  "name": "Rust Executor — Full Node Test",
+  "nodes": [
+    {
+      "id": "start-1",
+      "kind": "start",
+      "position": { "x": 60, "y": 300 },
+      "config": { "environmentId": null }
+    },
+
+    {
+      "id": "http-user",
+      "kind": "httpRequest",
+      "position": { "x": 320, "y": 260 },
+      "config": {
+        "method": "GET",
+        "url": "https://jsonplaceholder.typicode.com/users/1",
+        "headers": [],
+        "body": "",
+        "responseSchema": "z.object({\n  id: z.number(),\n  name: z.string(),\n  username: z.string(),\n  email: z.string(),\n  company: z.object({ name: z.string() })\n})"
+      }
+    },
+
+    {
+      "id": "log-raw",
+      "kind": "log",
+      "position": { "x": 620, "y": 340 },
+      "config": { "label": "1. Raw user" }
+    },
+
+    {
+      "id": "break-user",
+      "kind": "breakObject",
+      "position": { "x": 620, "y": 120 },
+      "config": {}
+    },
+
+    {
+      "id": "break-company",
+      "kind": "breakObject",
+      "position": { "x": 880, "y": 40 },
+      "config": {}
+    },
+
+    {
+      "id": "convert-id",
+      "kind": "convert",
+      "position": { "x": 620, "y": 500 },
+      "config": { "targetType": "string" }
+    },
+
+    {
+      "id": "make-summary",
+      "kind": "makeObject",
+      "position": { "x": 1100, "y": 80 },
+      "config": {
+        "fields": [
+          { "key": "name", "type": "string" },
+          { "key": "company", "type": "string" },
+          { "key": "email", "type": "string" }
+        ]
+      }
+    },
+
+    {
+      "id": "log-summary",
+      "kind": "log",
+      "position": { "x": 620, "y": 180 },
+      "config": { "label": "2. Summary object" }
+    },
+
+    {
+      "id": "env-setter",
+      "kind": "envSetter",
+      "position": { "x": 920, "y": 320 },
+      "config": { "varKey": "currentUser" }
+    },
+
+    {
+      "id": "env-var",
+      "kind": "envVar",
+      "position": { "x": 1180, "y": 420 },
+      "config": { "varKey": "currentUser" }
+    },
+
+    {
+      "id": "log-env",
+      "kind": "log",
+      "position": { "x": 1180, "y": 280 },
+      "config": { "label": "3. EnvVar after set" }
+    },
+
+    {
+      "id": "http-posts",
+      "kind": "httpRequest",
+      "position": { "x": 1460, "y": 260 },
+      "config": {
+        "method": "GET",
+        "url": "https://jsonplaceholder.typicode.com/posts?userId=#{userId}",
+        "headers": [],
+        "body": "",
+        "responseSchema": "z.array(z.object({\n  userId: z.number(),\n  id: z.number(),\n  title: z.string(),\n  body: z.string()\n}))"
+      }
+    },
+
+    {
+      "id": "match-status",
+      "kind": "match",
+      "position": { "x": 1760, "y": 220 },
+      "config": {
+        "cases": [
+          { "value": "200", "label": "OK" },
+          { "value": "404", "label": "Not Found" }
+        ]
+      }
+    },
+
+    {
+      "id": "foreach-seq",
+      "kind": "forEachSequential",
+      "position": { "x": 2040, "y": 120 },
+      "config": {}
+    },
+
+    {
+      "id": "break-post",
+      "kind": "breakObject",
+      "position": { "x": 2340, "y": 160 },
+      "config": {}
+    },
+
+    {
+      "id": "log-post-title",
+      "kind": "log",
+      "position": { "x": 2340, "y": 20 },
+      "config": { "label": "4. Post title (seq)" }
+    },
+
+    {
+      "id": "tap-posts",
+      "kind": "tap",
+      "position": { "x": 2040, "y": 380 },
+      "config": {}
+    },
+
+    {
+      "id": "foreach-par",
+      "kind": "forEachParallel",
+      "position": { "x": 2040, "y": 520 },
+      "config": {}
+    },
+
+    {
+      "id": "break-post-par",
+      "kind": "breakObject",
+      "position": { "x": 2340, "y": 560 },
+      "config": {}
+    },
+
+    {
+      "id": "log-post-par",
+      "kind": "log",
+      "position": { "x": 2340, "y": 440 },
+      "config": { "label": "5. Post title (par)" }
+    },
+
+    {
+      "id": "emit-done",
+      "kind": "emitEvent",
+      "position": { "x": 2040, "y": -60 },
+      "config": {
+        "name": "allPostsLogged",
+        "payload": [
+          { "key": "count", "type": "string" }
+        ]
+      }
+    },
+
+    {
+      "id": "on-done",
+      "kind": "onEvent",
+      "position": { "x": 60, "y": 620 },
+      "config": { "name": "allPostsLogged" }
+    },
+
+    {
+      "id": "log-event",
+      "kind": "log",
+      "position": { "x": 360, "y": 600 },
+      "config": { "label": "6. Event received" }
+    },
+
+    {
+      "id": "log-error",
+      "kind": "log",
+      "position": { "x": 2040, "y": 700 },
+      "config": { "label": "7. Match default" }
+    }
+  ],
+  "edges": [
+    { "id": "e-start", "kind": "exec", "fromNode": "start-1", "fromPin": "exec-out", "toNode": "http-user", "toPin": "exec-in" },
+    { "id": "e-log-raw", "kind": "exec", "fromNode": "http-user", "fromPin": "exec-out", "toNode": "log-raw", "toPin": "exec-in" },
+    { "id": "e-log-summary", "kind": "exec", "fromNode": "log-raw", "fromPin": "exec-out", "toNode": "log-summary", "toPin": "exec-in" },
+    { "id": "e-env-set", "kind": "exec", "fromNode": "log-summary", "fromPin": "exec-out", "toNode": "env-setter", "toPin": "exec-in" },
+    { "id": "e-log-env", "kind": "exec", "fromNode": "env-setter", "fromPin": "exec-out", "toNode": "log-env", "toPin": "exec-in" },
+    { "id": "e-http-posts", "kind": "exec", "fromNode": "log-env", "fromPin": "exec-out", "toNode": "http-posts", "toPin": "exec-in" },
+    { "id": "e-match", "kind": "exec", "fromNode": "http-posts", "fromPin": "exec-out", "toNode": "match-status", "toPin": "exec-in" },
+    { "id": "e-match-ok", "kind": "exec", "fromNode": "match-status", "fromPin": "exec-case:0", "toNode": "foreach-seq", "toPin": "exec-in" },
+    { "id": "e-match-404", "kind": "exec", "fromNode": "match-status", "fromPin": "exec-case:1", "toNode": "log-error", "toPin": "exec-in" },
+    { "id": "e-foreach-body", "kind": "exec", "fromNode": "foreach-seq", "fromPin": "exec-body", "toNode": "log-post-title", "toPin": "exec-in" },
+    { "id": "e-foreach-done", "kind": "exec", "fromNode": "foreach-seq", "fromPin": "exec-out", "toNode": "emit-done", "toPin": "exec-in" },
+    { "id": "e-emit-done-par", "kind": "exec", "fromNode": "emit-done", "fromPin": "exec-out", "toNode": "foreach-par", "toPin": "exec-in" },
+    { "id": "e-foreach-par-body", "kind": "exec", "fromNode": "foreach-par", "fromPin": "exec-body", "toNode": "log-post-par", "toPin": "exec-in" },
+    { "id": "e-on-done", "kind": "exec", "fromNode": "on-done", "fromPin": "exec-out", "toNode": "log-event", "toPin": "exec-in" },
+
+    { "id": "d-user-log", "kind": "data", "fromNode": "http-user", "fromPin": "out:name", "toNode": "log-raw", "toPin": "in:value" },
+    { "id": "d-user-break", "kind": "data", "fromNode": "http-user", "fromPin": "out:id", "toNode": "break-user", "toPin": "in:object" },
+    { "id": "d-company-break", "kind": "data", "fromNode": "http-user", "fromPin": "out:company", "toNode": "break-company", "toPin": "in:object" },
+    { "id": "d-user-id-convert", "kind": "data", "fromNode": "http-user", "fromPin": "out:id", "toNode": "convert-id", "toPin": "in:value" },
+    { "id": "d-convert-posts", "kind": "data", "fromNode": "convert-id", "fromPin": "out:value", "toNode": "http-posts", "toPin": "in:userId" },
+    { "id": "d-user-name-summary", "kind": "data", "fromNode": "http-user", "fromPin": "out:name", "toNode": "make-summary", "toPin": "in:name" },
+    { "id": "d-user-email-summary", "kind": "data", "fromNode": "http-user", "fromPin": "out:email", "toNode": "make-summary", "toPin": "in:email" },
+    { "id": "d-company-name-summary", "kind": "data", "fromNode": "break-company", "fromPin": "out:name", "toNode": "make-summary", "toPin": "in:company" },
+    { "id": "d-summary-log", "kind": "data", "fromNode": "make-summary", "fromPin": "out:object", "toNode": "log-summary", "toPin": "in:value" },
+    { "id": "d-user-name-envset", "kind": "data", "fromNode": "http-user", "fromPin": "out:name", "toNode": "env-setter", "toPin": "in:value" },
+    { "id": "d-env-log", "kind": "data", "fromNode": "env-var", "fromPin": "out:value", "toNode": "log-env", "toPin": "in:value" },
+    { "id": "d-posts-status-match", "kind": "data", "fromNode": "http-posts", "fromPin": "out:status", "toNode": "match-status", "toPin": "in:value" },
+    { "id": "d-posts-value-seq", "kind": "data", "fromNode": "http-posts", "fromPin": "out:value", "toNode": "foreach-seq", "toPin": "in:array" },
+    { "id": "d-foreach-item-break", "kind": "data", "fromNode": "foreach-seq", "fromPin": "out:item", "toNode": "break-post", "toPin": "in:object" },
+    { "id": "d-post-title-log", "kind": "data", "fromNode": "break-post", "fromPin": "out:title", "toNode": "log-post-title", "toPin": "in:value" },
+    { "id": "d-posts-tap", "kind": "data", "fromNode": "http-posts", "fromPin": "out:value", "toNode": "tap-posts", "toPin": "in:value" },
+    { "id": "d-tap-par", "kind": "data", "fromNode": "tap-posts", "fromPin": "out:value", "toNode": "foreach-par", "toPin": "in:array" },
+    { "id": "d-foreach-par-break", "kind": "data", "fromNode": "foreach-par", "fromPin": "out:item", "toNode": "break-post-par", "toPin": "in:object" },
+    { "id": "d-post-par-title-log", "kind": "data", "fromNode": "break-post-par", "fromPin": "out:title", "toNode": "log-post-par", "toPin": "in:value" },
+    { "id": "d-event-count", "kind": "data", "fromNode": "convert-id", "fromPin": "out:value", "toNode": "emit-done", "toPin": "in:count" },
+    { "id": "d-on-done-log", "kind": "data", "fromNode": "on-done", "fromPin": "out:count", "toNode": "log-event", "toPin": "in:value" }
+  ],
+  "viewport": { "x": 30, "y": 80, "zoom": 0.6 }
+}

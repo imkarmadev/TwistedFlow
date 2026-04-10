@@ -7,6 +7,7 @@
 //! `db.rs` so the SQL stays in one place.
 
 use crate::db;
+use serde::Serialize;
 use serde_json::Value;
 use std::sync::Mutex;
 use tauri::State;
@@ -162,4 +163,47 @@ pub fn rename_flow(id: String, name: String, state: State<'_, AppState>) -> Resu
 pub fn delete_flow(id: String, state: State<'_, AppState>) -> Result<(), String> {
     let conn = state.db.lock().map_err(map_err)?;
     db::delete_flow(&conn, &id).map_err(map_err)
+}
+
+// ─── Custom Nodes ─────────────────────────────────────────────
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CustomNodeFile {
+    pub filename: String,
+    pub content: String,
+}
+
+/// Scan a directory for .ts files and return their contents.
+/// The frontend parses + evals them to extract node definitions.
+/// Supports `~` expansion for the home directory.
+#[tauri::command]
+pub fn scan_custom_nodes(directory: String) -> Result<Vec<CustomNodeFile>, String> {
+    let expanded = if directory.starts_with("~/") {
+        let home = std::env::var("HOME").unwrap_or_default();
+        directory.replacen("~", &home, 1)
+    } else {
+        directory
+    };
+    let dir = std::path::Path::new(&expanded);
+    if !dir.is_dir() {
+        return Ok(vec![]);
+    }
+    let mut files = Vec::new();
+    let entries = std::fs::read_dir(dir).map_err(|e| e.to_string())?;
+    for entry in entries {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let path = entry.path();
+        if path.extension().map(|e| e == "ts").unwrap_or(false) {
+            let filename = path
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_string();
+            let content = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+            files.push(CustomNodeFile { filename, content });
+        }
+    }
+    files.sort_by(|a, b| a.filename.cmp(&b.filename));
+    Ok(files)
 }

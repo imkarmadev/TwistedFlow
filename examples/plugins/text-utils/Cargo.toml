@@ -1,0 +1,11 @@
+[package]
+name = "twistedflow-plugin-text-utils"
+version = "0.1.0"
+edition = "2021"
+description = "Example TwistedFlow plugin — text transformation nodes"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+twistedflow-plugin = { path = "../../../apps/desktop/src-tauri/crates/twistedflow-plugin" }

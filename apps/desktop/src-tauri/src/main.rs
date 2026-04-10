@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    twistedrest_lib::run()
+    twistedflow_lib::run()
 }

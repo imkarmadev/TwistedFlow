@@ -1,6 +1,6 @@
-# Contributing to TwistedRest
+# Contributing to TwistedFlow
 
-Thanks for your interest in contributing! TwistedRest is an open-source visual API workflow builder, and we welcome contributions of all kinds — bug reports, feature ideas, code, docs, and example flows.
+Thanks for your interest in contributing! TwistedFlow is an open-source visual API workflow builder, and we welcome contributions of all kinds — bug reports, feature ideas, code, docs, and example flows.
 
 ## Getting Started
 
@@ -14,8 +14,8 @@ Thanks for your interest in contributing! TwistedRest is an open-source visual A
 ### Setup
 
 ```bash
-git clone https://github.com/imkarmadev/TwistedRest.git
-cd TwistedRest
+git clone https://github.com/imkarmadev/TwistedFlow.git
+cd TwistedFlow
 bun install
 ```
 
@@ -45,7 +45,7 @@ bun run typecheck         # all packages
 ## Project Structure
 
 ```
-TwistedRest/
+TwistedFlow/
 ├── apps/
 │   ├── desktop/              # Tauri desktop app
 │   │   ├── src-tauri/        # Rust backend (SQLite, HTTP, OAuth2)
@@ -62,7 +62,7 @@ TwistedRest/
 
 ### Bug Reports
 
-Open an [issue](https://github.com/imkarmadev/TwistedRest/issues) with:
+Open an [issue](https://github.com/imkarmadev/TwistedFlow/issues) with:
 - What you expected
 - What actually happened
 - Steps to reproduce
@@ -102,7 +102,7 @@ This is the most common type of contribution. Here's the checklist:
 Example flows live in `/examples` as `.flow.json` files. They're importable via the sidebar's "+ import" button.
 
 To create one:
-1. Build the flow in TwistedRest
+1. Build the flow in TwistedFlow
 2. Export it (click the ↓ icon on the flow in the sidebar)
 3. Rename the file descriptively (e.g., `github-pr-checker.flow.json`)
 4. Add it to `/examples` via PR
@@ -118,7 +118,7 @@ Good examples:
 - **TypeScript** — strict mode, no `any` unless necessary
 - **CSS Modules** — `.module.css` files, design tokens from `app.css`
 - **No Tailwind** — we use CSS custom properties + CSS Modules
-- **Imports** — workspace packages via `@twistedrest/core`, `@twistedrest/shared`
+- **Imports** — workspace packages via `@twistedflow/core`, `@twistedflow/shared`
 - **Rust** — standard `rustfmt` formatting
 
 ## Release Process

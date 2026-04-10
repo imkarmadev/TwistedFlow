@@ -102,7 +102,7 @@ jobs:
         if: github.event_name != 'release' && runner.os == 'macOS'
         uses: actions/upload-artifact@v4
         with:
-          name: TwistedRest-${{ matrix.target }}
+          name: TwistedFlow-${{ matrix.target }}
           path: |
             apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
             apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/macos/*.app
@@ -112,7 +112,7 @@ jobs:
         if: github.event_name != 'release' && runner.os == 'Linux'
         uses: actions/upload-artifact@v4
         with:
-          name: TwistedRest-${{ matrix.target }}
+          name: TwistedFlow-${{ matrix.target }}
           path: |
             apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/deb/*.deb
             apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/appimage/*.AppImage
@@ -129,7 +129,7 @@ jobs:
           tauriScript: bun run tauri
           args: --target ${{ matrix.target }}
           tagName: ${{ github.ref_name }}
-          releaseName: TwistedRest ${{ github.ref_name }}
+          releaseName: TwistedFlow ${{ github.ref_name }}
           releaseBody: See the full changelog in the release notes.
           releaseDraft: false
           prerelease: false

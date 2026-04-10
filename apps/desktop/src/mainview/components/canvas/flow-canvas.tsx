@@ -31,21 +31,21 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import {
-  runFlow,
-  type ExecHttpRequest,
-  type ExecHttpResponse,
   type NodeStatus,
   type DataType,
-} from "@twistedrest/core";
+} from "@twistedflow/core";
 
-import type { RPC, ProjectDetail, Environment } from "../../use-tauri";
 import { NodePalette } from "./node-palette";
+import { CustomNode } from "./nodes/custom-node";
+import { PluginNode, type PluginNodeDef } from "./nodes/plugin-node";
 import {
   NODE_TYPES_MAP,
   NODE_REGISTRY,
   findNodeDef,
   type NodeTypeDef,
+  type NodeCategory,
 } from "../../lib/node-registry";
 import {
   computeHttpRequestPins,
@@ -58,30 +58,28 @@ import {
   computeLogPins,
   computeMakeObjectPins,
   computeFunctionPins,
-  computeEnvSetterPins,
+  computeSetVariablePins,
+  computeGetVariablePins,
   computeMatchPins,
   computeEmitEventPins,
   computeOnEventPins,
   type ComputedPins,
   type PayloadField,
 } from "../../lib/node-pins";
-import { evalZodSchema } from "../../lib/eval-schema";
 import { getInputPinSourceType, getSourcePinType } from "../../lib/schema-resolution";
-import { FlowExecContext, type FlowExecContextValue } from "../../lib/exec-context";
+import { FlowExecContext, type FlowExecContextValue, type ProjectEnvironment } from "../../lib/exec-context";
 import s from "./flow-canvas.module.css";
 
 interface FlowCanvasProps {
-  rpc: RPC;
-  flowId: string;
+  projectPath: string;
+  flowFilename: string;
   selectedNode: Node | null;
   onSelectionChange: (node: Node | null) => void;
   /** Bound from parent so the inspector can mutate node data via callback. */
   registerUpdateNodeData: (fn: (id: string, data: Record<string, unknown>) => void) => void;
   registerDeleteNode: (fn: (id: string) => void) => void;
-  /** Active project metadata — drives baseUrl + default headers at run time. */
-  project: ProjectDetail | null;
   /** Available environments — Start node renders the selector from these. */
-  environments: Environment[];
+  environments: ProjectEnvironment[];
   /** Notifies the parent (App) of the latest per-node run results, so the
       Inspector (mounted outside the canvas) can show them. */
   onResultsChange: (results: Record<string, Record<string, unknown>>) => void;
@@ -122,9 +120,8 @@ interface DomainEdge {
   toPin: string;
 }
 
-// Sourced from the node registry — adding a new type only requires
-// editing lib/node-registry.ts.
-const NODE_TYPES = NODE_TYPES_MAP;
+// Sourced from the node registry + custom nodes.
+const NODE_TYPES = { ...NODE_TYPES_MAP, customNode: CustomNode, pluginNode: PluginNode };
 
 const DEFAULT_EDGE_OPTIONS: DefaultEdgeOptions = {
   type: "default",
@@ -140,12 +137,11 @@ export function FlowCanvas(props: FlowCanvasProps) {
 }
 
 function FlowCanvasInner({
-  rpc,
-  flowId,
+  projectPath,
+  flowFilename,
   onSelectionChange,
   registerUpdateNodeData,
   registerDeleteNode,
-  project,
   environments,
   onResultsChange,
   onErrorsChange,
@@ -190,7 +186,6 @@ function FlowCanvasInner({
   const [running, setRunning] = useState(false);
   /** AbortController for the current run. Signalling it stops the executor
    *  at the next node boundary. */
-  const abortRef = useRef<AbortController | null>(null);
 
   // Always-fresh refs so the run handler closes over the latest graph
   const nodesRef = useRef(nodes);
@@ -233,6 +228,61 @@ function FlowCanvasInner({
    *  save from firing with stale/default data during transitions. */
   const hasLoadedRef = useRef(false);
 
+  // No custom node defs in the file-based model — custom nodes live in ~/.twistedflow/customNodes
+  const customPaletteEntries = useMemo<NodeTypeDef[]>(() => [], []);
+
+  // Load WASM plugin node metadata from Rust backend
+  const [pluginDefs, setPluginDefs] = useState<PluginNodeDef[]>([]);
+  useEffect(() => {
+    void invoke<Array<{
+      name: string;
+      typeId: string;
+      category: string;
+      description: string;
+      inputs?: Array<{ key: string; dataType: string }>;
+      outputs?: Array<{ key: string; dataType: string }>;
+    }>>("list_node_types").then((all) => {
+      // Filter to only WASM plugin nodes (not built-in ones from inventory).
+      // Built-in nodes are already in NODE_REGISTRY. Plugin nodes have typeIds
+      // that start with "plugin" by convention, but we can also filter by
+      // checking if the typeId is NOT in NODE_REGISTRY.
+      const builtinTypes = new Set(NODE_REGISTRY.map((n) => n.type));
+      const plugins = all.filter((n) => !builtinTypes.has(n.typeId));
+      setPluginDefs(
+        plugins.map((n) => ({
+          name: n.name,
+          typeId: n.typeId,
+          category: n.category,
+          description: n.description ?? "",
+          inputs: n.inputs ?? [],
+          outputs: n.outputs ?? [],
+        })),
+      );
+    }).catch(() => {
+      // list_node_types not available or failed — ignore
+    });
+  }, []);
+
+  // Build palette entries from WASM plugin nodes
+  const pluginPaletteEntries = useMemo<NodeTypeDef[]>(
+    () =>
+      pluginDefs.map((def) => ({
+        type: "pluginNode",
+        label: def.name,
+        category: (def.category || "Plugins") as NodeCategory,
+        description: def.description || `WASM plugin: ${def.typeId}`,
+        component: PluginNode,
+        hasExecIn: true,
+        hasExecOut: true,
+        hasDataIn: def.inputs.length > 0,
+        hasDataOut: def.outputs.length > 0,
+        defaultExecInPin: "exec-in",
+        acceptsDataInput: () => true,
+        defaultData: () => ({ _pluginDef: def }),
+      })),
+    [pluginDefs],
+  );
+
   /** Called by React Flow when the user finishes panning or zooming. */
   const onMoveEnd = useCallback((_: unknown, vp: { x: number; y: number; zoom: number }) => {
     viewportRef.current = vp;
@@ -256,14 +306,18 @@ function FlowCanvasInner({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // ── Load flow on flowId change ─────────────────────────────
+  // ── Load flow on flowFilename / projectPath change ─────────
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     justLoadedRef.current = true;
     hasLoadedRef.current = false;
 
-    void rpc.request.getFlow({ id: flowId }).then((flow) => {
+    void invoke<{
+      nodes: unknown[];
+      edges: unknown[];
+      viewport?: { x: number; y: number; zoom: number };
+    } | null>("get_flow", { projectPath, filename: flowFilename }).then((flow) => {
       if (cancelled || !flow) return;
       const domainNodes = (flow.nodes as DomainNode[]) ?? [];
       const domainEdges = (flow.edges as DomainEdge[]) ?? [];
@@ -272,9 +326,7 @@ function FlowCanvasInner({
 
       // Restore saved viewport or fit. We use a timeout to let React
       // Flow fully process the new nodes before manipulating the viewport.
-      const vp = (flow as unknown as Record<string, unknown>).viewport as
-        | { x: number; y: number; zoom: number }
-        | undefined;
+      const vp = flow.viewport;
       const hasSavedViewport = vp && typeof vp.x === "number" && typeof vp.zoom === "number";
       if (hasSavedViewport) {
         viewportRef.current = vp;
@@ -302,15 +354,16 @@ function FlowCanvasInner({
       //   2. There are actual nodes to save (prevents wiping a flow
       //      when cleanup fires during a transitional empty state)
       if (hasLoadedRef.current && nodesRef.current.length > 0) {
-        void rpc.request.saveFlow({
-          id: flowId,
+        void invoke("save_flow", {
+          projectPath,
+          filename: flowFilename,
           nodes: nodesRef.current.map(rfToDomain),
           edges: edgesRef.current.map(rfEdgeToDomain),
           viewport: viewportRef.current,
         });
       }
     };
-  }, [rpc, flowId, reactFlow]);
+  }, [projectPath, flowFilename, reactFlow]);
 
   // ── Debounced autosave (nodes + edges + viewport) ──────────
   // Fires on node/edge changes AND on viewport changes (via viewportTick).
@@ -325,15 +378,16 @@ function FlowCanvasInner({
     const t = setTimeout(() => {
       const domainNodes = nodes.map(rfToDomain);
       const domainEdges = edges.map(rfEdgeToDomain);
-      void rpc.request.saveFlow({
-        id: flowId,
+      void invoke("save_flow", {
+        projectPath,
+        filename: flowFilename,
         nodes: domainNodes,
         edges: domainEdges,
         viewport: viewportRef.current,
       });
     }, 600);
     return () => clearTimeout(t);
-  }, [nodes, edges, viewportTick, rpc, flowId, loading]);
+  }, [nodes, edges, viewportTick, projectPath, flowFilename, loading]);
 
   // ── React Flow handlers ────────────────────────────────────
   const onNodesChange = useCallback(
@@ -412,14 +466,14 @@ function FlowCanvasInner({
   useEffect(() => registerUpdateNodeData(updateNodeData), [registerUpdateNodeData, updateNodeData]);
   useEffect(() => registerDeleteNode(deleteNode), [registerDeleteNode, deleteNode]);
 
-  // Active env = the one selected on the Start node. Recomputes whenever
-  // the user changes the dropdown (which mutates the start node's data,
-  // which updates the nodes state).
+  // Active env = the one selected on the Start node. The Start node stores
+  // the env filename (e.g. "production.env.json") in data.environmentFilename.
+  // Recomputes whenever the user changes the dropdown.
   const activeEnvironment = useMemo(() => {
     const startNode = nodes.find((n) => n.type === "start");
-    const envId = (startNode?.data as { environmentId?: string } | undefined)?.environmentId;
-    if (!envId) return null;
-    return environments.find((e) => e.id === envId) ?? null;
+    const envFilename = (startNode?.data as { environmentFilename?: string } | undefined)?.environmentFilename;
+    if (!envFilename) return null;
+    return environments.find((e) => e.filename === envFilename) ?? null;
   }, [nodes, environments]);
 
   // Pre-flight validation: walks every node, returns the first reason the
@@ -430,12 +484,9 @@ function FlowCanvasInner({
     [nodes, edges, activeEnvironment],
   );
 
-  // ── Flow execution ─────────────────────────────────────────
+  // ── Flow execution (Rust executor via Tauri IPC) ───────────
   const run = useCallback(() => {
     if (running) return;
-    // Re-check validation at the moment of execution. Belt + suspenders —
-    // the Start node already disables the button, but we don't want a
-    // stale call to slip through.
     const check = validateFlow(nodesRef.current, edgesRef.current, activeEnvironment);
     if (!check.canRun) {
       console.warn("[runFlow] blocked:", check.reason);
@@ -447,72 +498,70 @@ function FlowCanvasInner({
     setRawResponses({});
     setRunning(true);
 
-    const controller = new AbortController();
-    abortRef.current = controller;
-
     // Resolve the active environment from the Start node's config
     const startNode = nodesRef.current.find((n) => n.type === "start");
-    const envId = (startNode?.data as { environmentId?: string } | undefined)?.environmentId;
-    const env = environments.find((e) => e.id === envId);
+    const envFilename = (startNode?.data as { environmentFilename?: string } | undefined)?.environmentFilename;
+    const env = environments.find((e) => e.filename === envFilename);
     const envVars: Record<string, unknown> = {};
     for (const v of env?.vars ?? []) {
       envVars[v.key] = v.value;
     }
 
-    void runFlow({
-      nodes: nodesRef.current as never,
-      edges: edgesRef.current as never,
-      fetch: (req: ExecHttpRequest) =>
-        invoke<ExecHttpResponse>("http_request", { req }),
-      evalSchema: (src) => {
-        const r = evalZodSchema(src);
-        return r.ok ? r.schema! : null;
-      },
-      onLog,
-      signal: controller.signal,
-      onStatus: (id, event) => {
-        setStatuses((prev) => ({ ...prev, [id]: event.status }));
-        if (event.output) {
-          setResults((prev) => ({ ...prev, [id]: event.output! }));
+    const context = {
+      envVars,
+    };
+
+    // Listen for status + log events from the Rust executor, then invoke
+    let unlistenStatus: UnlistenFn | null = null;
+    let unlistenLog: UnlistenFn | null = null;
+
+    void (async () => {
+      unlistenStatus = await listen<{
+        nodeId: string;
+        status: NodeStatus;
+        output?: Record<string, unknown>;
+        error?: string;
+        rawResponse?: unknown;
+      }>("flow:status", (e) => {
+        const { nodeId, status, output, error, rawResponse } = e.payload;
+        setStatuses((prev) => ({ ...prev, [nodeId]: status }));
+        if (output) {
+          setResults((prev) => ({ ...prev, [nodeId]: output }));
         }
-        if (event.error) {
-          setErrors((prev) => ({ ...prev, [id]: event.error! }));
+        if (error) {
+          setErrors((prev) => ({ ...prev, [nodeId]: error }));
         }
-        if (event.rawResponse !== undefined) {
-          setRawResponses((prev) => ({ ...prev, [id]: event.rawResponse }));
+        if (rawResponse !== undefined) {
+          setRawResponses((prev) => ({ ...prev, [nodeId]: rawResponse }));
         }
-      },
-      context: {
-        projectBaseUrl: project?.baseUrl,
-        envBaseUrl: env?.baseUrl,
-        projectHeaders: project?.headers,
-        envHeaders: env?.headers,
-        envVars,
-        auth: env?.auth
-          ? {
-              authType: env.auth.authType,
-              bearerToken: env.auth.bearerToken,
-              basicUsername: env.auth.basicUsername,
-              basicPassword: env.auth.basicPassword,
-              apiKeyName: env.auth.apiKeyName,
-              apiKeyValue: env.auth.apiKeyValue,
-              apiKeyLocation: env.auth.apiKeyLocation,
-              oauth2AccessToken: env.auth.oauth2AccessToken,
-            }
-          : undefined,
-      },
-    })
-      .catch((err) => {
-        console.error("[runFlow]", err);
-      })
-      .finally(() => {
-        setRunning(false);
-        abortRef.current = null;
       });
-  }, [running, project, environments, activeEnvironment, onLog]);
+
+      unlistenLog = await listen<{
+        nodeId: string;
+        label: string;
+        value: unknown;
+      }>("flow:log", (e) => {
+        onLog(e.payload);
+      });
+
+      try {
+        await invoke("run_flow", {
+          nodes: nodesRef.current,
+          edges: edgesRef.current,
+          context,
+        });
+      } catch (err) {
+        console.error("[runFlow]", err);
+      } finally {
+        unlistenStatus?.();
+        unlistenLog?.();
+        setRunning(false);
+      }
+    })();
+  }, [running, environments, activeEnvironment, onLog]);
 
   const stop = useCallback(() => {
-    abortRef.current?.abort();
+    void invoke("stop_flow");
   }, []);
 
   const execContextValue = useMemo<FlowExecContextValue>(
@@ -523,7 +572,6 @@ function FlowCanvasInner({
       results,
       errors,
       running,
-      project,
       environments,
       activeEnvironment,
       canRun: validation.canRun,
@@ -536,7 +584,6 @@ function FlowCanvasInner({
       results,
       errors,
       running,
-      project,
       environments,
       activeEnvironment,
       validation,
@@ -725,6 +772,7 @@ function FlowCanvasInner({
         {palette && (
           <NodePalette
             position={palette.screenPos}
+            extraNodes={[...customPaletteEntries, ...pluginPaletteEntries]}
             title={
               palette.pendingConnection
                 ? palette.pendingConnection.sourceKind === "exec"
@@ -767,20 +815,32 @@ function FlowCanvasInner({
 // ─── Domain ↔ React Flow translators ───────────────────────────
 
 function domainToRf(n: DomainNode): Node {
+  let type = kindToType(n.kind);
+  // Unknown kind + has _pluginDef → it's a WASM plugin node
+  if (!KNOWN_TYPES.has(n.kind) && n.config?._pluginDef) {
+    type = "pluginNode";
+  }
   return {
     id: n.id,
-    type: kindToType(n.kind),
+    type,
     position: n.position,
     data: (n.config ?? {}) as Record<string, unknown>,
   };
 }
 
 function rfToDomain(n: Node): DomainNode {
+  const data = (n.data ?? {}) as Record<string, unknown>;
+  // Plugin nodes: store the actual plugin typeId as kind, not "pluginNode"
+  let kind = typeToKind(n.type ?? "httpRequest");
+  if (n.type === "pluginNode") {
+    const pluginDef = data._pluginDef as { typeId?: string } | undefined;
+    kind = pluginDef?.typeId ?? "pluginNode";
+  }
   return {
     id: n.id,
-    kind: typeToKind(n.type ?? "httpRequest"),
+    kind,
     position: { x: n.position.x, y: n.position.y },
-    config: (n.data ?? {}) as Record<string, unknown>,
+    config: data,
   };
 }
 
@@ -916,7 +976,8 @@ function collectPinIds(node: Node): Set<string> {
     );
   else if (node.type === "tap") pins = computeTapPins();
   else if (node.type === "log") pins = computeLogPins();
-  else if (node.type === "envSetter") pins = computeEnvSetterPins();
+  else if (node.type === "setVariable") pins = computeSetVariablePins();
+  else if (node.type === "getVariable") pins = computeGetVariablePins((node.data as { varName?: string } | undefined)?.varName);
   else if (node.type === "match")
     pins = computeMatchPins(
       (node.data as { cases?: Array<{ value: string; label?: string }> } | undefined)?.cases,
@@ -939,6 +1000,15 @@ function collectPinIds(node: Node): Set<string> {
     // payload pins are protected from culling the same way Break-Object's
     // dynamic outputs are.
     pins = computeOnEventPins();
+  } else if (node.type === "customNode") {
+    const def = (node.data as Record<string, unknown>)?._customDef as
+      | { inputs?: Array<{ key: string }>; outputs?: Array<{ key: string }>; isAsync?: boolean }
+      | undefined;
+    const ids = new Set<string>();
+    if (def?.isAsync) { ids.add("exec-in"); ids.add("exec-out"); }
+    for (const inp of def?.inputs ?? []) ids.add(`in:${inp.key}`);
+    for (const out of def?.outputs ?? []) ids.add(`out:${out.key}`);
+    return ids;
   } else pins = { inputs: [], outputs: [] };
   return new Set([...pins.inputs.map((p) => p.id), ...pins.outputs.map((p) => p.id)]);
 }
@@ -958,9 +1028,12 @@ const KNOWN_TYPES = new Set([
   "makeObject",
   "function",
   "match",
-  "envSetter",
+  "setVariable",
+  "getVariable",
   "emitEvent",
   "onEvent",
+  "customNode",
+  "pluginNode",
 ]);
 
 function kindToType(kind: string): string {

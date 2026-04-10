@@ -1,7 +1,7 @@
 /**
  * Modal for inferring a Zod schema from a sample JSON response.
  *
- * Paste any JSON value, hit Generate, the walker in @twistedrest/core converts
+ * Paste any JSON value, hit Generate, the walker in @twistedflow/core converts
  * it to Zod source code, and clicking Apply replaces the node's schema.
  *
  * The preview pane is read-only — users review the generated source before
@@ -9,7 +9,7 @@
  */
 
 import { useState } from "react";
-import { zodFromJsonString } from "@twistedrest/core";
+import { zodFromJsonString } from "@twistedflow/core";
 import s from "./json-to-zod-modal.module.css";
 
 interface JsonToZodModalProps {

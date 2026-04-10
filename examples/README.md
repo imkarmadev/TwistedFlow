@@ -1,8 +1,8 @@
 # Example Flows
 
-Importable `.flow.json` files showcasing TwistedRest's capabilities. To use one:
+Importable `.flow.json` files showcasing TwistedFlow's capabilities. To use one:
 
-1. Open TwistedRest
+1. Open TwistedFlow
 2. Select a project in the sidebar
 3. Click **+ import** (below the flow list)
 4. Pick a `.flow.json` file

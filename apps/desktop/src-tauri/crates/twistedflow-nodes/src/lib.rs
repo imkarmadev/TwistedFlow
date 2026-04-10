@@ -1,0 +1,40 @@
+//! TwistedFlow built-in node implementations.
+//!
+//! Each node is declared in its own module and implements the `Node` trait via
+//! the `#[node]` proc macro. The macro also registers each node into the
+//! `inventory`-based registry so that `build_registry()` can discover them
+//! without manual wiring.
+
+pub use twistedflow_engine::*;
+
+// ── Exec nodes ──────────────────────────────────────────────────────────────
+pub mod emit_event;
+pub mod for_each;
+pub mod http_request;
+pub mod log_node;
+pub mod match_node;
+pub mod set_variable;
+pub mod start;
+
+// ── Pure-data nodes ─────────────────────────────────────────────────────────
+pub mod break_object;
+pub mod convert;
+pub mod env_var;
+pub mod get_variable;
+pub mod make_object;
+pub mod tap;
+
+// Convenient re-exports
+pub use break_object::BreakObjectNode;
+pub use convert::ConvertNode;
+pub use emit_event::EmitEventNode;
+pub use env_var::EnvVarNode;
+pub use for_each::{ForEachParNode, ForEachSeqNode};
+pub use get_variable::GetVariableNode;
+pub use http_request::HttpRequestNode;
+pub use log_node::LogNode;
+pub use make_object::MakeObjectNode;
+pub use match_node::MatchNode;
+pub use set_variable::SetVariableNode;
+pub use start::StartNode;
+pub use tap::TapNode;

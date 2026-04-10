@@ -10,74 +10,95 @@
  *
  * This split keeps the canvas as the single source of truth for nodes/edges
  * while letting the inspector live outside React Flow's tree.
+ *
+ * Project model (file-based):
+ *   - A project is a directory on disk containing twistedflow.toml and
+ *     one or more *.flow.json files.
+ *   - `activeProjectPath` is the absolute path to that directory.
+ *   - Flows are identified by filename (e.g. "main.flow.json").
+ *   - Environments are loaded from the project directory via list_environments.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Node } from "@xyflow/react";
+import { invoke } from "@tauri-apps/api/core";
 import { TitleBar } from "./components/layout/title-bar";
 import { Sidebar } from "./components/layout/sidebar";
 import { FlowCanvas } from "./components/canvas/flow-canvas";
 import { InspectorPanel } from "./components/inspector/inspector-panel";
 import { ProjectSettingsModal } from "./components/settings/project-settings-modal";
-import { useTauri, type ProjectDetail, type Environment } from "./use-tauri";
-import type { DataType } from "@twistedrest/core";
+import type { DataType } from "@twistedflow/core";
 import { ConsoleContext, type ConsoleEntry } from "./lib/console-context";
 import { ConsolePanel } from "./components/console/console-panel";
 import { checkForUpdate } from "./lib/update-checker";
 import s from "./App.module.css";
 
-export interface ProjectItem {
-  id: string;
-  name: string;
-  updatedAt: string;
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+export interface EnvVarEntry {
+  key: string;
+  value: string;
 }
 
+export interface ProjectEnvironment {
+  name: string;
+  filename: string;
+  vars: EnvVarEntry[];
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
+
 export default function App() {
-  const { rpc } = useTauri();
-  const [projects, setProjects] = useState<ProjectItem[]>([]);
-  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
-  const [activeFlowId, setActiveFlowId] = useState<string | null>(null);
+  // ── Project ──────────────────────────────────────────────────────
+  const [activeProjectPath, setActiveProjectPath] = useState<string | null>(null);
+  const [projectName, setProjectName] = useState<string | null>(null);
+
+  // ── Flows ────────────────────────────────────────────────────────
+  const [activeFlowFilename, setActiveFlowFilename] = useState<string | null>(null);
+
+  // ── Environments ─────────────────────────────────────────────────
+  const [environments, setEnvironments] = useState<ProjectEnvironment[]>([]);
+
+  // ── Node selection ───────────────────────────────────────────────
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
 
-  // Lightweight update check on startup
+  // ── Settings modal ───────────────────────────────────────────────
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
+  // ── Update checker ───────────────────────────────────────────────
   const [updateInfo, setUpdateInfo] = useState<{
     latestVersion: string;
     releaseUrl: string;
   } | null>(null);
+
   useEffect(() => {
     void checkForUpdate().then((info) => {
       if (info) setUpdateInfo(info);
     });
   }, []);
 
-  // Project metadata + environments are loaded once per active project
-  // and passed down so the canvas + Start node can use them at run time.
-  const [activeProject, setActiveProject] = useState<ProjectDetail | null>(null);
-  const [environments, setEnvironments] = useState<Environment[]>([]);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-
-  // Last-run results + errors + raw responses, surfaced to the inspector.
-  // FlowCanvas pushes these up via the callbacks below so the (out-of-tree)
-  // Inspector can display them when a node is selected.
+  // ── Last-run results / errors / raw responses ─────────────────────
   const [lastResults, setLastResults] = useState<Record<string, Record<string, unknown>>>({});
   const [lastErrors, setLastErrors] = useState<Record<string, string>>({});
   const [lastRawResponses, setLastRawResponses] = useState<Record<string, unknown>>({});
+
   const registerResults = useCallback(
-    (r: Record<string, Record<string, unknown>>) => {
-      setLastResults(r);
-    },
+    (r: Record<string, Record<string, unknown>>) => setLastResults(r),
     [],
   );
-  const registerErrors = useCallback((e: Record<string, string>) => {
-    setLastErrors(e);
-  }, []);
-  const registerRawResponses = useCallback((r: Record<string, unknown>) => {
-    setLastRawResponses(r);
-  }, []);
+  const registerErrors = useCallback(
+    (e: Record<string, string>) => setLastErrors(e),
+    [],
+  );
+  const registerRawResponses = useCallback(
+    (r: Record<string, unknown>) => setLastRawResponses(r),
+    [],
+  );
 
-  // ── Console panel state ──────────────────────────────────────
+  // ── Console panel ─────────────────────────────────────────────────
   const [consoleEntries, setConsoleEntries] = useState<ConsoleEntry[]>([]);
   const [consoleOpen, setConsoleOpen] = useState(false);
+
   const consoleAppend = useCallback(
     (entry: Omit<ConsoleEntry, "id" | "timestamp">) => {
       setConsoleEntries((prev) => [
@@ -113,7 +134,6 @@ export default function App() {
     ],
   );
 
-  // Pass-through callback the executor invokes when a Log node fires.
   const handleLog = useCallback(
     (entry: { nodeId: string; label: string; value: unknown }) => {
       consoleAppend(entry);
@@ -121,26 +141,7 @@ export default function App() {
     [consoleAppend],
   );
 
-  const refreshProjectMeta = useCallback(async () => {
-    if (!rpc || !activeProjectId) {
-      setActiveProject(null);
-      setEnvironments([]);
-      return;
-    }
-    const [proj, envs] = await Promise.all([
-      rpc.request.getProject({ id: activeProjectId }),
-      rpc.request.listEnvironments({ projectId: activeProjectId }),
-    ]);
-    setActiveProject(proj);
-    setEnvironments(envs);
-  }, [rpc, activeProjectId]);
-
-  useEffect(() => {
-    void refreshProjectMeta();
-  }, [refreshProjectMeta]);
-
-  // Canvas-owned imperative handles. Stored in refs so re-renders don't
-  // detach the inspector from the canvas.
+  // ── Canvas imperative handles ─────────────────────────────────────
   const updateNodeDataRef = useRef<(id: string, data: Record<string, unknown>) => void>(() => {});
   const deleteNodeRef = useRef<(id: string) => void>(() => {});
   const getInputTypeRef = useRef<(nodeId: string, inputPinId: string) => DataType>(
@@ -163,71 +164,97 @@ export default function App() {
     [],
   );
 
-  // Stable wrapper passed to the Inspector — forwards to the latest closure
-  // captured by FlowCanvas. Doesn't change identity so the Inspector won't
-  // re-render unnecessarily.
+  // Stable wrapper — identity never changes, so Inspector won't re-render.
   const getInputType = useCallback(
     (nodeId: string, inputPinId: string) => getInputTypeRef.current(nodeId, inputPinId),
     [],
   );
 
-  // Initial project load
-  useEffect(() => {
-    if (!rpc) return;
-    void rpc.request.listProjects({}).then(setProjects);
-  }, [rpc]);
+  // ── Load environments for the active project ──────────────────────
+  const loadEnvironments = useCallback(async (projectPath: string) => {
+    try {
+      const envs = await invoke<ProjectEnvironment[]>("list_environments", { projectPath });
+      setEnvironments(envs);
+    } catch (err) {
+      console.error("[invoke list_environments]", err);
+      setEnvironments([]);
+    }
+  }, []);
 
-  // When the active project changes, ensure it has at least one flow and select it.
+  // ── React to project path change ──────────────────────────────────
   useEffect(() => {
-    if (!rpc || !activeProjectId) {
-      setActiveFlowId(null);
+    if (!activeProjectPath) {
+      setProjectName(null);
+      setEnvironments([]);
+      setActiveFlowFilename(null);
+      setSelectedNode(null);
       return;
     }
+
     let cancelled = false;
+
     void (async () => {
-      let list = await rpc.request.listFlows({ projectId: activeProjectId });
-      if (cancelled) return;
-      if (list.length === 0) {
-        const created = await rpc.request.createFlow({ projectId: activeProjectId, name: "main" });
-        if (cancelled || !created.id) return;
-        list = await rpc.request.listFlows({ projectId: activeProjectId });
+      // Load project metadata (name from twistedflow.toml)
+      try {
+        const meta = await invoke<{ path: string; name: string }>("open_project", {
+          path: activeProjectPath,
+        });
+        if (!cancelled) {
+          setProjectName(meta.name);
+          // Update path if backend expanded ~ to absolute (won't re-trigger
+          // effect if the value is the same)
+          if (meta.path !== activeProjectPath) {
+            setActiveProjectPath(meta.path);
+            return; // effect will re-run with the canonical path
+          }
+        }
+      } catch (err) {
+        console.error("[invoke open_project]", err);
+        if (!cancelled) setProjectName(null);
       }
-      if (cancelled) return;
-      setActiveFlowId(list[0]?.id ?? null);
+
+      // Load environments
+      if (!cancelled) {
+        await loadEnvironments(activeProjectPath);
+      }
+
+      // Load flow list and auto-select the first flow
+      if (!cancelled) {
+        try {
+          const flows = await invoke<{ filename: string; name: string }[]>("list_flows", {
+            projectPath: activeProjectPath,
+          });
+          if (!cancelled) {
+            setActiveFlowFilename(flows[0]?.filename ?? null);
+          }
+        } catch (err) {
+          console.error("[invoke list_flows]", err);
+          if (!cancelled) setActiveFlowFilename(null);
+        }
+      }
     })();
+
     return () => {
       cancelled = true;
     };
-  }, [rpc, activeProjectId]);
+  }, [activeProjectPath, loadEnvironments]);
 
-  // Drop selection when the active flow changes
+  // Drop node selection when the active flow changes
   useEffect(() => {
     setSelectedNode(null);
-  }, [activeFlowId]);
+  }, [activeFlowFilename]);
 
-  const handleCreateProject = useCallback(
-    async (name: string) => {
-      if (!rpc) return;
-      const created = await rpc.request.createProject({ name });
-      if (!created.id) return;
-      const fresh = await rpc.request.listProjects({});
-      setProjects(fresh);
-      setActiveProjectId(created.id);
-    },
-    [rpc],
-  );
-
-  const handleSelectProject = useCallback((id: string) => {
-    setActiveProjectId(id);
-    setActiveFlowId(null);
+  // ── Project open / create handlers (called by Sidebar) ───────────
+  const handleOpenProject = useCallback((path: string) => {
+    setActiveProjectPath(path);
+    setActiveFlowFilename(null);
     setSelectedNode(null);
   }, []);
 
+  // ── Inspector callbacks ───────────────────────────────────────────
   const handleInspectorChange = useCallback(
     (id: string, data: Record<string, unknown>) => {
       updateNodeDataRef.current(id, data);
-      // Keep the local selectedNode reference in sync so the inspector
-      // re-renders against the latest data.
       setSelectedNode((prev) => (prev && prev.id === id ? { ...prev, data } : prev));
     },
     [],
@@ -238,120 +265,113 @@ export default function App() {
     setSelectedNode(null);
   }, []);
 
+  // ── Render ────────────────────────────────────────────────────────
   return (
     <ConsoleContext.Provider value={consoleContextValue}>
-    <div className={s.root}>
-      {/*
-       * No CSS material div here — vibrancy is provided natively by
-       * NSVisualEffectView via window-vibrancy in src-tauri/src/lib.rs.
-       * The window itself is transparent and macOS draws the material
-       * behind everything we paint.
-       */}
-      <TitleBar />
+      <div className={s.root}>
+        {/*
+         * No CSS material div here — vibrancy is provided natively by
+         * NSVisualEffectView via window-vibrancy in src-tauri/src/lib.rs.
+         * The window itself is transparent and macOS draws the material
+         * behind everything we paint.
+         */}
+        <TitleBar />
 
-      {updateInfo && (
-        <div className={s.updateBanner}>
-          <span>v{updateInfo.latestVersion} available</span>
-          <a
-            href={updateInfo.releaseUrl}
-            target="_blank"
-            rel="noopener"
-            className={s.updateLink}
-          >
-            Download
-          </a>
-          <button
-            className={s.updateDismiss}
-            onClick={() => setUpdateInfo(null)}
-          >
-            ×
-          </button>
-        </div>
-      )}
+        {updateInfo && (
+          <div className={s.updateBanner}>
+            <span>v{updateInfo.latestVersion} available</span>
+            <a
+              href={updateInfo.releaseUrl}
+              target="_blank"
+              rel="noopener"
+              className={s.updateLink}
+            >
+              Download
+            </a>
+            <button
+              className={s.updateDismiss}
+              onClick={() => setUpdateInfo(null)}
+            >
+              ×
+            </button>
+          </div>
+        )}
 
-      <div className={s.body}>
-        <Sidebar
-          rpc={rpc}
-          projects={projects}
-          activeProjectId={activeProjectId}
-          activeFlowId={activeFlowId}
-          onSelectProject={handleSelectProject}
-          onSelectFlow={setActiveFlowId}
-          onCreateProject={handleCreateProject}
-          onOpenSettings={() => setSettingsOpen(true)}
-        />
+        <div className={s.body}>
+          <Sidebar
+            activeProjectPath={activeProjectPath}
+            activeProjectName={projectName}
+            activeFlowFilename={activeFlowFilename}
+            onOpenProject={handleOpenProject}
+            onCreateProject={(parentPath, name) => {
+              void invoke("create_project", { parentPath, name }).then(() => {
+                handleOpenProject(`${parentPath}/${name}`);
+              });
+            }}
+            onSelectFlow={setActiveFlowFilename}
+            onOpenSettings={() => setSettingsOpen(true)}
+          />
 
-        <main className={s.content}>
-          {rpc && activeFlowId ? (
-            <FlowCanvas
-              rpc={rpc}
-              flowId={activeFlowId}
-              selectedNode={selectedNode}
-              onSelectionChange={setSelectedNode}
-              registerUpdateNodeData={registerUpdateNodeData}
-              registerDeleteNode={registerDeleteNode}
-              project={activeProject}
-              environments={environments}
-              onResultsChange={registerResults}
-              onErrorsChange={registerErrors}
-              onRawResponsesChange={registerRawResponses}
-              registerGetInputType={registerGetInputType}
-              onLog={handleLog}
-            />
-          ) : (
-            <div className={s.empty}>
-              <div className={s.emptyTitle}>TwistedRest</div>
-              <div className={s.emptyDesc}>
-                {projects.length === 0
-                  ? "Create a project to start building API workflows."
-                  : "Select a project to open its canvas."}
+          <main className={s.content}>
+            {activeProjectPath && activeFlowFilename ? (
+              <FlowCanvas
+                projectPath={activeProjectPath}
+                flowFilename={activeFlowFilename}
+                selectedNode={selectedNode}
+                onSelectionChange={setSelectedNode}
+                registerUpdateNodeData={registerUpdateNodeData}
+                registerDeleteNode={registerDeleteNode}
+                environments={environments}
+                onResultsChange={registerResults}
+                onErrorsChange={registerErrors}
+                onRawResponsesChange={registerRawResponses}
+                registerGetInputType={registerGetInputType}
+                onLog={handleLog}
+              />
+            ) : (
+              <div className={s.empty}>
+                <div className={s.emptyTitle}>TwistedFlow</div>
+                <div className={s.emptyDesc}>
+                  Open or create a project to start building API workflows.
+                </div>
               </div>
-            </div>
-          )}
-        </main>
+            )}
+          </main>
 
-        {/* Inspector only mounts when something is selected — empty panel
-            wastes ~340px of canvas real estate. */}
-        {rpc && activeFlowId && selectedNode && (
-          <InspectorPanel
-            node={selectedNode}
-            onChange={handleInspectorChange}
-            onDelete={handleInspectorDelete}
+          {/* Inspector only mounts when something is selected — empty panel
+              wastes ~340px of canvas real estate. */}
+          {activeProjectPath && activeFlowFilename && selectedNode && (
+            <InspectorPanel
+              node={selectedNode}
+              onChange={handleInspectorChange}
+              onDelete={handleInspectorDelete}
+              environments={environments}
+              results={lastResults}
+              errors={lastErrors}
+              rawResponses={lastRawResponses}
+              getInputType={getInputType}
+            />
+          )}
+        </div>
+
+        {settingsOpen && activeProjectPath && (
+          <ProjectSettingsModal
+            projectPath={activeProjectPath}
+            projectName={projectName}
             environments={environments}
-            results={lastResults}
-            errors={lastErrors}
-            rawResponses={lastRawResponses}
-            getInputType={getInputType}
+            onClose={() => setSettingsOpen(false)}
+            onChanged={() => {
+              void loadEnvironments(activeProjectPath);
+            }}
           />
         )}
+
+        {/* Bottom console panel — visible on every flow, persists across switches.
+            insetRight reserves space for the inspector island when it's mounted. */}
+        {activeProjectPath && activeFlowFilename && (
+          <ConsolePanel insetRight={selectedNode ? 356 : 16} />
+        )}
       </div>
-
-      {settingsOpen && rpc && activeProject && (
-        <ProjectSettingsModal
-          rpc={rpc}
-          project={activeProject}
-          environments={environments}
-          onClose={() => setSettingsOpen(false)}
-          onChanged={() => {
-            void refreshProjectMeta();
-            void rpc!.request.listProjects({}).then(setProjects);
-          }}
-          onDeleted={() => {
-            setSettingsOpen(false);
-            setActiveProjectId(null);
-            setActiveFlowId(null);
-            setSelectedNode(null);
-            void rpc!.request.listProjects({}).then(setProjects);
-          }}
-        />
-      )}
-
-      {/* Bottom console panel — visible on every flow, persists across switches.
-          insetRight reserves space for the inspector island when it's mounted. */}
-      {rpc && activeFlowId && (
-        <ConsolePanel insetRight={selectedNode ? 356 : 16} />
-      )}
-    </div>
     </ConsoleContext.Provider>
   );
 }

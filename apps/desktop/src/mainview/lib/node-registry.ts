@@ -13,7 +13,7 @@
 
 import type { ComponentType } from "react";
 import type { NodeProps } from "@xyflow/react";
-import type { DataType } from "@twistedrest/core";
+import type { DataType } from "@twistedflow/core";
 
 import { StartNode } from "../components/canvas/nodes/start-node";
 import { HttpRequestNode } from "../components/canvas/nodes/http-request-node";
@@ -30,7 +30,8 @@ import { TapNode } from "../components/canvas/nodes/tap-node";
 import { LogNode } from "../components/canvas/nodes/log-node";
 import { MakeObjectNode } from "../components/canvas/nodes/make-object-node";
 import { FunctionNode } from "../components/canvas/nodes/function-node";
-import { EnvSetterNode } from "../components/canvas/nodes/env-setter-node";
+import { SetVariableNode } from "../components/canvas/nodes/set-variable-node";
+import { GetVariableNode } from "../components/canvas/nodes/get-variable-node";
 import { MatchNode } from "../components/canvas/nodes/match-node";
 
 export type NodeCategory =
@@ -98,7 +99,7 @@ export const NODE_REGISTRY: NodeTypeDef[] = [
     hasExecOut: true,
     hasDataIn: false,
     hasDataOut: false,
-    defaultData: () => ({ environmentId: null }),
+    defaultData: () => ({ environmentFilename: null }),
     singleton: true,
   },
   {
@@ -138,11 +139,11 @@ export const NODE_REGISTRY: NodeTypeDef[] = [
     defaultData: () => ({ varKey: "" }),
   },
   {
-    type: "envSetter",
-    label: "Env Setter",
+    type: "setVariable",
+    label: "Set Variable",
     category: "Variables",
-    description: "Writes a value into the runtime env vars. Downstream EnvVar nodes see the updated value.",
-    component: EnvSetterNode,
+    description: "Set a runtime variable within the flow. Read it with Get Variable.",
+    component: SetVariableNode,
     hasExecIn: true,
     hasExecOut: true,
     hasDataIn: true,
@@ -150,7 +151,19 @@ export const NODE_REGISTRY: NodeTypeDef[] = [
     defaultExecInPin: "exec-in",
     defaultDataInPin: "in:value",
     acceptsDataInput: () => true,
-    defaultData: () => ({ varKey: "" }),
+    defaultData: () => ({ varName: "" }),
+  },
+  {
+    type: "getVariable",
+    label: "Get Variable",
+    category: "Variables",
+    description: "Read a runtime variable set by Set Variable. Red if never set.",
+    component: GetVariableNode,
+    hasExecIn: false,
+    hasExecOut: false,
+    hasDataIn: false,
+    hasDataOut: true,
+    defaultData: () => ({ varName: "" }),
   },
   {
     type: "breakObject",

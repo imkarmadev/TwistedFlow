@@ -16,7 +16,7 @@
 import { useMemo } from "react";
 import { Handle, Position, useNodes, useEdges, type NodeProps } from "@xyflow/react";
 import clsx from "clsx";
-import type { DataType } from "@twistedrest/core";
+import type { DataType } from "@twistedflow/core";
 import s from "./node.module.css";
 import { getInputPinSourceType } from "../../../lib/schema-resolution";
 

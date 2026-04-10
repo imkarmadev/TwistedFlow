@@ -387,6 +387,84 @@ async function runChain(
       const label = ((node.data as { label?: string } | undefined)?.label ?? "Log") || "Log";
       opts.onLog?.({ nodeId: currentId, label, value });
       opts.onStatus(currentId, { status: "ok", output: { value } });
+    } else if (node.type === "customNode") {
+      // Custom node loaded from a .ts file. The execute function source
+      // is stored in data._customDef.executeSource. Three modes:
+      //   - sync: shouldn't appear in exec chain (handled by resolvePinValue)
+      //   - async blocking: awaits the function, sets outputs
+      //   - async + emits: fires in background, emits event when done
+      const customDef = (node.data as Record<string, unknown>)?._customDef as {
+        isAsync?: boolean;
+        emits?: string;
+        executeSource?: string;
+        inputs?: Array<{ key: string }>;
+      } | undefined;
+
+      if (customDef?.isAsync && customDef.executeSource) {
+        opts.onStatus(currentId, { status: "running" });
+        try {
+          // Resolve input values
+          const inputValues: Record<string, unknown> = {};
+          for (const field of customDef.inputs ?? []) {
+            const inEdge = opts.edges.find(
+              (e) => e.target === currentId && e.data?.kind === "data" && e.targetHandle === `in:${field.key}`,
+            );
+            if (inEdge) {
+              inputValues[field.key] = resolvePinValue(inEdge.source, inEdge.sourceHandle ?? "", opts, outputs, tapLogs);
+            }
+          }
+
+          // Reconstruct the function from source (normalize method shorthand)
+          let src = customDef.executeSource;
+          if (/^\w+\s*\(/.test(src) && !src.startsWith("function") && !src.startsWith("async")) {
+            src = "function " + src;
+          } else if (/^async\s+\w+\s*\(/.test(src) && !src.startsWith("async function")) {
+            src = src.replace(/^async\s+/, "async function ");
+          }
+          // eslint-disable-next-line no-new-func
+          const fn = new Function("return " + src)();
+          const resultPromise = fn(inputValues);
+
+          if (customDef.emits) {
+            // Fire-and-forget: continue chain, emit event when done
+            bgPromises.push(
+              (async () => {
+                try {
+                  const result = await resultPromise;
+                  if (result && typeof result === "object") {
+                    outputs[currentId] = result as Record<string, unknown>;
+                  }
+                  // Emit the event to all matching On Event listeners
+                  const listeners = opts.nodes.filter(
+                    (n) => n.type === "onEvent" && (n.data as { name?: string })?.name === customDef.emits,
+                  );
+                  for (const listener of listeners) {
+                    outputs[listener.id] = result && typeof result === "object"
+                      ? (result as Record<string, unknown>)
+                      : { value: result };
+                    opts.onStatus(listener.id, { status: "ok", output: outputs[listener.id] });
+                    const nextId = findNextExecNode(listener.id, "exec-out", opts.edges);
+                    if (nextId) bgPromises.push(runChain(nextId, opts, outputs, bgPromises, tapLogs));
+                  }
+                } catch (err) {
+                  opts.onStatus(currentId, { status: "error", error: String(err) });
+                }
+              })(),
+            );
+            opts.onStatus(currentId, { status: "ok" });
+          } else {
+            // Blocking: await the result
+            const result = await resultPromise;
+            if (result && typeof result === "object") {
+              outputs[currentId] = result as Record<string, unknown>;
+            }
+            opts.onStatus(currentId, { status: "ok", output: outputs[currentId] });
+          }
+        } catch (err) {
+          opts.onStatus(currentId, { status: "error", error: `Custom node error: ${err}` });
+          return;
+        }
+      }
     } else if (
       node.type === "envVar" ||
       node.type === "breakObject" ||
@@ -864,6 +942,49 @@ function resolvePinValue(
       const msg = err instanceof Error ? err.message : String(err);
       opts.onStatus(sourceId, { status: "error", error: `Function error: ${msg}` });
       return undefined;
+    }
+  }
+
+  // Sync custom node: resolve inputs, eval the execute function, return outputs.
+  if (sourceNode.type === "customNode") {
+    const customDef = (sourceNode.data as Record<string, unknown>)?._customDef as {
+      executeSource?: string;
+      inputs?: Array<{ key: string }>;
+      isAsync?: boolean;
+    } | undefined;
+    if (customDef?.executeSource && !customDef.isAsync) {
+      const inputValues: Record<string, unknown> = {};
+      for (const field of customDef.inputs ?? []) {
+        const inEdge = edges.find(
+          (e) => e.target === sourceId && e.data?.kind === "data" && e.targetHandle === `in:${field.key}`,
+        );
+        if (inEdge) {
+          inputValues[field.key] = resolvePinValue(inEdge.source, inEdge.sourceHandle ?? "", opts, outputs, tapLogs);
+        }
+      }
+      try {
+        // eslint-disable-next-line no-new-func
+        // Normalize method shorthand: "execute() {" → "function execute() {"
+        let src = customDef.executeSource;
+        if (/^\w+\s*\(/.test(src) && !src.startsWith("function") && !src.startsWith("async")) {
+          src = "function " + src;
+        } else if (/^async\s+\w+\s*\(/.test(src) && !src.startsWith("async function")) {
+          src = src.replace(/^async\s+/, "async function ");
+        }
+        const fn = new Function("return " + src)();
+        const result = fn(inputValues);
+        if (result && typeof result === "object") {
+          outputs[sourceId] = result as Record<string, unknown>;
+          return (result as Record<string, unknown>)[sourcePin];
+        }
+        return result;
+      } catch (err) {
+        console.error(`[custom-node] ${sourceId} execute failed:`, err, "source:", customDef.executeSource?.slice(0, 200));
+        opts.onStatus(sourceId, { status: "error", error: `Custom node error: ${err}` });
+        return undefined;
+      }
+    } else {
+      console.warn(`[custom-node] ${sourceId} missing executeSource or is async`, customDef ? { hasSource: !!customDef.executeSource, isAsync: customDef.isAsync } : "no _customDef");
     }
   }
 

@@ -1,4 +1,4 @@
-# TwistedRest
+# TwistedFlow
 
 A visual API workflow builder inspired by Unreal Engine Blueprints. Build, chain, and debug HTTP request flows by wiring nodes on a canvas — no code required for most workflows, with a Function node escape hatch when you need custom logic.
 
@@ -84,7 +84,7 @@ Auth is injected after all header merges — can't be accidentally overridden.
 ### Monorepo Structure
 
 ```
-twistedrest/
+twistedflow/
 ├── apps/desktop/                # Tauri desktop app
 │   ├── src-tauri/               # Rust backend (SQLite, HTTP, OAuth2)
 │   │   ├── src/main.rs          # Entry
@@ -131,8 +131,8 @@ twistedrest/
 
 ```bash
 # Clone
-git clone https://github.com/imkarmadev/TwistedRest.git
-cd twistedrest
+git clone https://github.com/imkarmadev/TwistedFlow.git
+cd twistedflow
 
 # Install JS dependencies
 bun install
@@ -183,7 +183,7 @@ Produces a `.app` bundle in `src-tauri/target/release/bundle/`.
 
 ## Data Storage
 
-- **SQLite database** at `~/Library/Application Support/dev.twistedrest.desktop/twistedrest.db`
+- **SQLite database** at `~/Library/Application Support/dev.twistedflow.desktop/twistedflow.db`
 - Schema uses UUIDs + `updated_at` + soft-delete columns — designed for future cloud sync
 - Flows store nodes, edges, and viewport as JSON columns
 

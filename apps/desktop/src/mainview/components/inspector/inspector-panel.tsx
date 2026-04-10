@@ -9,7 +9,7 @@
 
 import { useMemo, useState } from "react";
 import type { Node } from "@xyflow/react";
-import { zodFromJson, type DataType } from "@twistedrest/core";
+import { zodFromJson, type DataType } from "@twistedflow/core";
 import { evalZodSchema } from "../../lib/eval-schema";
 import { copyCurlToClipboard } from "../../lib/copy-curl";
 import type { Environment } from "../../use-tauri";
@@ -131,11 +131,10 @@ export function InspectorPanel({
             data={(node.data ?? {}) as Record<string, unknown>}
             onChange={(d) => onChange(node.id, d)}
           />
-        ) : node.type === "envSetter" ? (
-          <EnvSetterEditor
+        ) : node.type === "setVariable" || node.type === "getVariable" ? (
+          <VariableEditor
             data={(node.data ?? {}) as Record<string, unknown>}
             onChange={(d) => onChange(node.id, d)}
-            environments={environments}
           />
         ) : node.type === "start" ? (
           <div className={s.hint}>
@@ -996,32 +995,30 @@ function OnEventEditor({ data, onChange }: OnEventEditorProps) {
   );
 }
 
-// ─── Env Setter editor ──────────────────────────────────────────
+// ─── Variable (Set/Get) editor ──────────────────────────────────
 
-interface EnvSetterEditorProps {
+interface VariableEditorProps {
   data: Record<string, unknown>;
   onChange: (data: Record<string, unknown>) => void;
-  environments: Environment[];
 }
 
-function EnvSetterEditor({ data, onChange, environments }: EnvSetterEditorProps) {
-  const varKey = (data.varKey as string) ?? "";
+function VariableEditor({ data, onChange }: VariableEditorProps) {
+  const varName = (data.varName as string) ?? "";
 
   return (
     <div className={s.form}>
       <div className={s.field}>
-        <label className={s.label}>Variable Key</label>
+        <label className={s.label}>Variable Name</label>
         <input
           className={s.input}
-          value={varKey}
-          onChange={(e) => onChange({ ...data, varKey: e.target.value })}
-          placeholder="token"
+          value={varName}
+          onChange={(e) => onChange({ ...data, varName: e.target.value })}
+          placeholder="myVariable"
           spellCheck={false}
         />
         <div className={s.schemaHint}>
-          At runtime, writes the wired <code>value</code> into the env vars map
-          under this key. All downstream EnvVar nodes reading this key will see
-          the new value.
+          Runtime flow variable. Use <strong>Set Variable</strong> to write
+          and <strong>Get Variable</strong> to read. Undefined reads show as errors.
         </div>
       </div>
     </div>

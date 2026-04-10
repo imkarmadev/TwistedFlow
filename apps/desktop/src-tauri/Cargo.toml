@@ -1,13 +1,32 @@
+[workspace]
+members = [".", "crates/twistedflow-engine", "crates/twistedflow-nodes", "crates/twistedflow-macros", "crates/twistedflow-cli"]
+resolver = "2"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["net", "io-util", "time", "rt", "sync", "macros"] }
+async-trait = "0.1"
+reqwest = { version = "0.12", default-features = false, features = [
+  "rustls-tls",
+  "gzip",
+  "brotli",
+  "deflate",
+] }
+regex = "1"
+tokio-util = "0.7"
+log = "0.4"
+
 [package]
-name = "twistedrest"
+name = "twistedflow"
 version = "0.3.0"
-description = "TwistedRest — visual API workflow builder"
+description = "TwistedFlow — visual flow engine"
 authors = ["you"]
 edition = "2021"
 rust-version = "1.77"
 
 [lib]
-name = "twistedrest_lib"
+name = "twistedflow_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
@@ -16,19 +35,16 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-rusqlite = { version = "0.32", features = ["bundled"] }
+tauri-plugin-dialog = "2"
+serde = { workspace = true }
+serde_json = { workspace = true }
 uuid = { version = "1", features = ["v4"] }
-chrono = { version = "0.4", features = ["serde"] }
 open = "5"
-tokio = { version = "1", features = ["net", "io-util", "time"] }
-reqwest = { version = "0.12", default-features = false, features = [
-  "rustls-tls",
-  "gzip",
-  "brotli",
-  "deflate",
-] }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+reqwest = { workspace = true }
+twistedflow-engine = { path = "crates/twistedflow-engine" }
+twistedflow-nodes = { path = "crates/twistedflow-nodes" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 window-vibrancy = "0.5"

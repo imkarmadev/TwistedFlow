@@ -1,9 +1,12 @@
 /**
  * Tauri command bridge for the React app.
  *
- * Replaces the old Electrobun RPC layer. Each method maps to a
+ * Replaces the old SQLite-backed RPC layer. Each method maps to a
  * `#[tauri::command]` in src-tauri/src/commands.rs and is called via
  * `invoke()` from `@tauri-apps/api/core`.
+ *
+ * Projects are now folder-based: a project is a directory on disk.
+ * Flows and environments are individual JSON files inside that directory.
  *
  * Window controls go through `getCurrentWindow()` from
  * `@tauri-apps/api/window`. Native traffic lights are handled by macOS
@@ -15,107 +18,85 @@
 import { invoke, type InvokeArgs } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
-export interface ProjectSummary {
-  id: string;
+// ── Project ───────────────────────────────────────────────────────────────────
+
+export interface ProjectInfo {
+  path: string;
   name: string;
-  updatedAt: string;
 }
 
-export interface HeaderEntry {
-  key: string;
-  value: string;
-  enabled: boolean;
+// ── Flows ─────────────────────────────────────────────────────────────────────
+
+export interface FlowSummary {
+  name: string;
+  filename: string;
 }
 
-export interface ProjectDetail {
-  id: string;
+export interface FlowDetail {
   name: string;
-  baseUrl: string;
-  headers: HeaderEntry[];
-  updatedAt: string;
+  filename: string;
+  nodes: unknown[];
+  edges: unknown[];
+  viewport?: object;
 }
+
+// ── Environments ──────────────────────────────────────────────────────────────
 
 export interface EnvVar {
   key: string;
   value: string;
-  secret: boolean;
-}
-
-export type AuthType =
-  | "none"
-  | "bearer"
-  | "basic"
-  | "apiKey"
-  | "oauth2_client_credentials"
-  | "oauth2_authorization_code";
-
-export interface AuthConfig {
-  authType: AuthType;
-  bearerToken: string;
-  basicUsername: string;
-  basicPassword: string;
-  apiKeyName: string;
-  apiKeyValue: string;
-  apiKeyLocation: "header" | "query";
-  oauth2AuthUrl: string;
-  oauth2TokenUrl: string;
-  oauth2ClientId: string;
-  oauth2ClientSecret: string;
-  oauth2Scopes: string;
-  oauth2AccessToken: string;
-  oauth2RefreshToken: string;
-  oauth2ExpiresAt: number;
 }
 
 export interface Environment {
-  id: string;
-  projectId: string;
   name: string;
+  filename: string;
   vars: EnvVar[];
-  baseUrl: string;
-  headers: HeaderEntry[];
-  auth: AuthConfig;
-  updatedAt: string;
 }
 
-export interface FlowSummary {
-  id: string;
-  name: string;
-  updatedAt: string;
-}
-
-export interface FlowDetail {
-  id: string;
-  name: string;
-  nodes: unknown[];
-  edges: unknown[];
-}
+// ── RPC surface ───────────────────────────────────────────────────────────────
 
 export interface RPC {
   request: {
     // Projects
-    listProjects: (params: {}) => Promise<ProjectSummary[]>;
-    getProject: (params: { id: string }) => Promise<ProjectDetail | null>;
-    createProject: (params: { name: string }) => Promise<{ id: string; name: string }>;
-    updateProject: (params: {
-      id: string;
-      name: string;
-      baseUrl: string;
-      headers: HeaderEntry[];
-    }) => Promise<{ success: boolean }>;
-    deleteProject: (params: { id: string }) => Promise<{ success: boolean }>;
+    createProject: (params: { parentPath: string; name: string }) => Promise<ProjectInfo>;
+    openProject: (params: { path: string }) => Promise<ProjectInfo>;
+
+    // Flows
+    listFlows: (params: { projectPath: string }) => Promise<FlowSummary[]>;
+    getFlow: (params: { projectPath: string; filename: string }) => Promise<FlowDetail | null>;
+    saveFlow: (params: {
+      projectPath: string;
+      filename: string;
+      nodes: unknown;
+      edges: unknown;
+      viewport?: unknown;
+    }) => Promise<void>;
+    createFlow: (params: { projectPath: string; name: string }) => Promise<FlowSummary>;
+    deleteFlow: (params: { projectPath: string; filename: string }) => Promise<void>;
+    renameFlow: (params: {
+      projectPath: string;
+      oldFilename: string;
+      newName: string;
+    }) => Promise<FlowSummary>;
 
     // Environments
-    listEnvironments: (params: { projectId: string }) => Promise<Environment[]>;
-    createEnvironment: (params: { projectId: string; name: string }) => Promise<Environment>;
-    updateEnvironment: (params: {
-      id: string;
-      name: string;
+    listEnvironments: (params: { projectPath: string }) => Promise<Environment[]>;
+    saveEnvironment: (params: {
+      projectPath: string;
+      envName: string;
       vars: EnvVar[];
-      baseUrl: string;
-      headers: HeaderEntry[];
-      auth: AuthConfig;
-    }) => Promise<{ success: boolean }>;
+    }) => Promise<void>;
+    createEnvironment: (params: { projectPath: string; envName: string }) => Promise<Environment>;
+    deleteEnvironment: (params: { projectPath: string; envName: string }) => Promise<void>;
+
+    // HTTP
+    /** Fire a raw HTTP request via the Rust backend. */
+    httpRequest: (params: {
+      method: string;
+      url: string;
+      headers?: Record<string, string>;
+      body?: string;
+    }) => Promise<{ status: number; headers: Record<string, string>; body: string }>;
 
     /** OAuth2 Client Credentials token exchange via Rust. */
     oauth2FetchToken: (params: {
@@ -133,30 +114,28 @@ export interface RPC {
       clientSecret: string;
       scopes: string;
     }) => Promise<{ accessToken: string; refreshToken: string; expiresAt: number } | null>;
-    deleteEnvironment: (params: { id: string }) => Promise<{ success: boolean }>;
 
-    // Flows
-    listFlows: (params: { projectId: string }) => Promise<FlowSummary[]>;
-    getFlow: (params: { id: string }) => Promise<FlowDetail | null>;
-    createFlow: (params: { projectId: string; name: string }) => Promise<{ id: string; name: string }>;
-    saveFlow: (params: { id: string; nodes: unknown[]; edges: unknown[]; viewport?: { x: number; y: number; zoom: number } }) => Promise<{ success: boolean }>;
-    renameFlow: (params: { id: string; name: string }) => Promise<{ success: boolean }>;
-    deleteFlow: (params: { id: string }) => Promise<{ success: boolean }>;
+    // Executor
+    runFlow: (params: { projectPath: string; filename: string; env?: string }) => Promise<void>;
+    stopFlow: (params: { projectPath: string; filename: string }) => Promise<void>;
+    listNodeTypes: () => Promise<unknown[]>;
   };
   send: {
-    closeWindow: (params: {}) => void;
-    minimizeWindow: (params: {}) => void;
-    maximizeWindow: (params: {}) => void;
+    closeWindow: (params?: {}) => void;
+    minimizeWindow: (params?: {}) => void;
+    maximizeWindow: (params?: {}) => void;
   };
 }
 
+// ── Implementation ────────────────────────────────────────────────────────────
+
 /**
  * Wraps Tauri's invoke + window APIs in the same shape the components
- * already use, so the migration from Electrobun is purely a hook swap.
+ * already use.
  *
- * Errors from invoke are surfaced via console.error and the failing call
- * resolves to a sensible empty value, matching the old Electrobun handlers
- * which also returned `[]` / `{ success: false }` on failure.
+ * Errors from invoke are surfaced via console.error. Calls that are
+ * expected to return a list fall back to `[]`; nullable lookups fall back
+ * to `null`; void mutations re-throw so callers can handle them explicitly.
  */
 function makeRpc(): RPC {
   const win = getCurrentWindow();
@@ -170,65 +149,80 @@ function makeRpc(): RPC {
     }
   };
 
+  /** For void mutations: surfaces the error rather than swallowing it. */
+  const run = async (cmd: string, args: InvokeArgs): Promise<void> => {
+    try {
+      await invoke(cmd, args);
+    } catch (err) {
+      console.error(`[invoke ${cmd}]`, err);
+      throw err;
+    }
+  };
+
   return {
     request: {
-      listProjects: () => safe<ProjectSummary[]>("list_projects", {}, []),
+      // ── Projects ────────────────────────────────────────────────────────────
 
-      createProject: ({ name }) =>
-        safe<{ id: string; name: string }>("create_project", { name }, { id: "", name: "" }),
+      createProject: ({ parentPath, name }) =>
+        safe<ProjectInfo>("create_project", { parentPath, name }, { path: "", name }),
 
-      getProject: ({ id }) => safe<ProjectDetail | null>("get_project", { id }, null),
+      openProject: ({ path }) =>
+        safe<ProjectInfo>("open_project", { path }, { path: "", name: "" }),
 
-      updateProject: async ({ id, name, baseUrl, headers }) => {
-        try {
-          await invoke("update_project", { id, name, baseUrl, headers });
-          return { success: true };
-        } catch (err) {
-          console.error("[invoke update_project]", err);
-          return { success: false };
-        }
-      },
+      // ── Flows ────────────────────────────────────────────────────────────────
 
-      deleteProject: async ({ id }) => {
-        try {
-          await invoke("delete_project", { id });
-          return { success: true };
-        } catch (err) {
-          console.error("[invoke delete_project]", err);
-          return { success: false };
-        }
-      },
+      listFlows: ({ projectPath }) =>
+        safe<FlowSummary[]>("list_flows", { projectPath }, []),
 
-      // ── Environments ──────────────────────────────────────
-
-      listEnvironments: ({ projectId }) =>
-        safe<Environment[]>("list_environments", { projectId }, []),
-
-      createEnvironment: ({ projectId, name }) =>
-        safe<Environment>(
-          "create_environment",
-          { projectId, name },
-          {
-            id: "", projectId, name, vars: [], baseUrl: "", headers: [],
-            auth: {
-              authType: "none", bearerToken: "", basicUsername: "", basicPassword: "",
-              apiKeyName: "", apiKeyValue: "", apiKeyLocation: "header",
-              oauth2AuthUrl: "", oauth2TokenUrl: "", oauth2ClientId: "", oauth2ClientSecret: "",
-              oauth2Scopes: "", oauth2AccessToken: "", oauth2RefreshToken: "", oauth2ExpiresAt: 0,
-            },
-            updatedAt: "",
-          },
+      getFlow: ({ projectPath, filename }) =>
+        safe<FlowDetail | null>(
+          "get_flow",
+          { projectPath, filename },
+          null,
         ),
 
-      updateEnvironment: async ({ id, name, vars, baseUrl, headers, auth }) => {
-        try {
-          await invoke("update_environment", { id, name, vars, baseUrl, headers, auth });
-          return { success: true };
-        } catch (err) {
-          console.error("[invoke update_environment]", err);
-          return { success: false };
-        }
-      },
+      saveFlow: ({ projectPath, filename, nodes, edges, viewport }) =>
+        run("save_flow", { projectPath, filename, nodes, edges, viewport }),
+
+      createFlow: ({ projectPath, name }) =>
+        safe<FlowSummary>("create_flow", { projectPath, name }, { name, filename: "" }),
+
+      deleteFlow: ({ projectPath, filename }) =>
+        run("delete_flow", { projectPath, filename }),
+
+      renameFlow: ({ projectPath, oldFilename, newName }) =>
+        safe<FlowSummary>(
+          "rename_flow",
+          { projectPath, oldFilename, newName },
+          { name: newName, filename: oldFilename },
+        ),
+
+      // ── Environments ─────────────────────────────────────────────────────────
+
+      listEnvironments: ({ projectPath }) =>
+        safe<Environment[]>("list_environments", { projectPath }, []),
+
+      saveEnvironment: ({ projectPath, envName, vars }) =>
+        run("save_environment", { projectPath, envName, vars }),
+
+      createEnvironment: ({ projectPath, envName }) =>
+        safe<Environment>(
+          "create_environment",
+          { projectPath, envName },
+          { name: envName, filename: "", vars: [] },
+        ),
+
+      deleteEnvironment: ({ projectPath, envName }) =>
+        run("delete_environment", { projectPath, envName }),
+
+      // ── HTTP ─────────────────────────────────────────────────────────────────
+
+      httpRequest: (params) =>
+        safe<{ status: number; headers: Record<string, string>; body: string }>(
+          "http_request",
+          params as unknown as InvokeArgs,
+          { status: 0, headers: {}, body: "" },
+        ),
 
       oauth2FetchToken: async ({ tokenUrl, clientId, clientSecret, scopes }) => {
         try {
@@ -254,58 +248,18 @@ function makeRpc(): RPC {
         }
       },
 
-      deleteEnvironment: async ({ id }) => {
-        try {
-          await invoke("delete_environment", { id });
-          return { success: true };
-        } catch (err) {
-          console.error("[invoke delete_environment]", err);
-          return { success: false };
-        }
-      },
+      // ── Executor ─────────────────────────────────────────────────────────────
 
-      listFlows: ({ projectId }) =>
-        safe<FlowSummary[]>("list_flows", { projectId }, []),
+      runFlow: ({ projectPath, filename, env }) =>
+        run("run_flow", { projectPath, filename, env }),
 
-      getFlow: ({ id }) => safe<FlowDetail | null>("get_flow", { id }, null),
+      stopFlow: ({ projectPath, filename }) =>
+        run("stop_flow", { projectPath, filename }),
 
-      createFlow: ({ projectId, name }) =>
-        safe<{ id: string; name: string }>(
-          "create_flow",
-          { projectId, name },
-          { id: "", name: "" },
-        ),
-
-      saveFlow: async ({ id, nodes, edges, viewport }) => {
-        try {
-          await invoke("save_flow", { id, nodes, edges, viewport });
-          return { success: true };
-        } catch (err) {
-          console.error("[invoke save_flow]", err);
-          return { success: false };
-        }
-      },
-
-      renameFlow: async ({ id, name }) => {
-        try {
-          await invoke("rename_flow", { id, name });
-          return { success: true };
-        } catch (err) {
-          console.error("[invoke rename_flow]", err);
-          return { success: false };
-        }
-      },
-
-      deleteFlow: async ({ id }) => {
-        try {
-          await invoke("delete_flow", { id });
-          return { success: true };
-        } catch (err) {
-          console.error("[invoke delete_flow]", err);
-          return { success: false };
-        }
-      },
+      listNodeTypes: () =>
+        safe<unknown[]>("list_node_types", {}, []),
     },
+
     send: {
       closeWindow: () => {
         void win.close();
@@ -320,13 +274,15 @@ function makeRpc(): RPC {
   };
 }
 
+// ── Hook ──────────────────────────────────────────────────────────────────────
+
 /**
  * Returns a stable RPC instance. Tauri's invoke is always available
- * (no async init like Electrobun's webview bridge), so we don't need
- * the `ready` flag the old hook returned.
+ * (no async init), so we don't need a `ready` flag — but we keep
+ * `{ rpc }` as the return shape so callers don't need to change.
  */
 let cachedRpc: RPC | null = null;
 export function useTauri() {
   if (!cachedRpc) cachedRpc = makeRpc();
-  return { ready: true, rpc: cachedRpc };
+  return { rpc: cachedRpc };
 }

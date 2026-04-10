@@ -1,0 +1,16 @@
+[package]
+name = "twistedflow-nodes"
+version = "0.1.0"
+edition = "2021"
+description = "TwistedFlow built-in node implementations"
+
+[dependencies]
+twistedflow-engine = { path = "../twistedflow-engine" }
+twistedflow-macros = { path = "../twistedflow-macros" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+reqwest = { workspace = true }
+log = { workspace = true }
+inventory = "0.3"
+base64 = "0.22"

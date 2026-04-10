@@ -43,8 +43,8 @@ export function CodeEditor({
     (editor, monaco) => {
       editorRef.current = editor;
 
-      // Define a dark theme that matches TwistedRest's design tokens
-      monaco.editor.defineTheme("twistedrest-dark", {
+      // Define a dark theme that matches TwistedFlow's design tokens
+      monaco.editor.defineTheme("twistedflow-dark", {
         base: "vs-dark",
         inherit: true,
         rules: [
@@ -65,7 +65,7 @@ export function CodeEditor({
           "editor.inactiveSelectionBackground": "#1a1f2e",
         },
       });
-      monaco.editor.setTheme("twistedrest-dark");
+      monaco.editor.setTheme("twistedflow-dark");
 
       // Inject extra type declarations for autocomplete
       if (extraLibs) {

@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to TwistedRest are documented here.
+All notable changes to TwistedFlow are documented here.
 
 ## [0.2.0] — 2026-04-09
 
@@ -39,7 +39,7 @@ All notable changes to TwistedRest are documented here.
 - **Automated releases** — `bun run release patch/minor/major` bumps all configs, commits, tags, pushes
 - **Landing page** — static HTML, auto-deployed to GitHub Pages
 - **64 unit tests** covering executor, templates, schema walker, auth injection
-- **Rebranded** from ApiFlow to TwistedRest
+- **Rebranded** from ApiFlow to TwistedFlow
 
 ## [0.1.0] — 2026-04-08
 

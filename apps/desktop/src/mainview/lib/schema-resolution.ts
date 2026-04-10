@@ -17,7 +17,7 @@
 
 import { z, type ZodTypeAny } from "zod";
 import type { Node, Edge } from "@xyflow/react";
-import type { DataType } from "@twistedrest/core";
+import type { DataType } from "@twistedflow/core";
 import { evalZodSchema } from "./eval-schema";
 
 /**

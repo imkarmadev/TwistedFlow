@@ -21,6 +21,9 @@ export interface NodePaletteProps {
   /** Viewport-coordinate anchor point (where the user clicked or dropped). */
   position: { x: number; y: number };
 
+  /** Extra node defs to merge into the registry (custom nodes from .ts files). */
+  extraNodes?: NodeTypeDef[];
+
   /**
    * Optional filter to restrict the visible node defs. Used by the
    * drag-pin-drop spawner to show only nodes that have a compatible input
@@ -40,6 +43,7 @@ export interface NodePaletteProps {
 
 export function NodePalette({
   position,
+  extraNodes,
   filter,
   onSelect,
   onClose,
@@ -49,9 +53,14 @@ export function NodePalette({
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Apply the optional filter, then the search query
+  // Merge registry + custom nodes, then apply filter + search
+  const allNodes = useMemo(
+    () => [...NODE_REGISTRY, ...(extraNodes ?? [])],
+    [extraNodes],
+  );
+
   const filtered = useMemo(() => {
-    const base = filter ? NODE_REGISTRY.filter(filter) : NODE_REGISTRY;
+    const base = filter ? allNodes.filter(filter) : allNodes;
     if (!query.trim()) return base;
     const q = query.toLowerCase();
     return base.filter(
@@ -62,13 +71,33 @@ export function NodePalette({
     );
   }, [filter, query]);
 
-  // Group filtered list by category, preserving registry order
+  // Group filtered list by category. Start with the static registry
+  // categories (to preserve their order), then append any dynamic
+  // categories from custom nodes (e.g. "Shared", "Custom").
   const grouped = useMemo(() => {
-    const out: Array<{ category: NodeCategory; items: NodeTypeDef[] }> = [];
+    const out: Array<{ category: string; items: NodeTypeDef[] }> = [];
+    const seen = new Set<string>();
+
+    // Static categories first (preserves registry ordering)
     for (const cat of listCategories()) {
       const items = filtered.filter((d) => d.category === cat);
-      if (items.length > 0) out.push({ category: cat, items });
+      if (items.length > 0) {
+        out.push({ category: cat, items });
+        seen.add(cat);
+      }
     }
+
+    // Dynamic categories from custom/extra nodes
+    for (const def of filtered) {
+      if (!seen.has(def.category)) {
+        seen.add(def.category);
+        out.push({
+          category: def.category,
+          items: filtered.filter((d) => d.category === def.category),
+        });
+      }
+    }
+
     return out;
   }, [filtered]);
 

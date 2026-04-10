@@ -22,7 +22,7 @@ import {
   type NodeProps,
 } from "@xyflow/react";
 import clsx from "clsx";
-import { pinsFromSchema, type DataType } from "@twistedrest/core";
+import { pinsFromSchema, type DataType } from "@twistedflow/core";
 import s from "./node.module.css";
 import { resolveSourcePinSchema } from "../../../lib/schema-resolution";
 

@@ -11,7 +11,7 @@
  *             response Zod schema (or "out:value" if non-object).
  */
 
-import { inputPinsFor, pinsFromSchema, type DataType } from "@twistedrest/core";
+import { inputPinsFor, pinsFromSchema, type DataType } from "@twistedflow/core";
 import { evalZodSchema } from "./eval-schema";
 
 export interface ComputedPin {
@@ -142,16 +142,33 @@ export function computeBreakObjectPins(): ComputedPins {
  * one exec output per case + a default on right.
  */
 /**
- * Env Setter — exec-chain node that writes a value into the runtime
- * env vars. exec-in + exec-out + value data input.
+ * Set Variable — exec-chain node that writes a runtime variable.
  */
-export function computeEnvSetterPins(): ComputedPins {
+export function computeSetVariablePins(): ComputedPins {
   return {
     inputs: [
       EXEC_IN,
       { id: "in:value", side: "left", label: "value", kind: "data", dataType: "unknown" },
     ],
     outputs: [EXEC_OUT],
+  };
+}
+
+/**
+ * Get Variable — data node that reads a runtime variable.
+ */
+export function computeGetVariablePins(varName?: string): ComputedPins {
+  return {
+    inputs: [],
+    outputs: [
+      {
+        id: "out:value",
+        side: "right",
+        label: varName || "value",
+        kind: "data",
+        dataType: "unknown",
+      },
+    ],
   };
 }
 

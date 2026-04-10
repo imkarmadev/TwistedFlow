@@ -1,0 +1,20 @@
+[package]
+name = "twistedflow-engine"
+version = "0.1.0"
+edition = "2021"
+description = "TwistedFlow execution engine — graph model, node trait, executor loop"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+async-trait = { workspace = true }
+reqwest = { workspace = true }
+regex = { workspace = true }
+log = { workspace = true }
+tokio-util = { workspace = true }
+base64 = "0.22"
+inventory = "0.3"
+wasmtime = "29"
+wasmtime-wasi = "29"
+anyhow = "1"

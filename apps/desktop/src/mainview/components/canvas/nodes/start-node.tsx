@@ -14,16 +14,16 @@ import { useFlowExec } from "../../../lib/exec-context";
 export function StartNode({ id, data }: NodeProps) {
   const { run, stop, running, environments, canRun, runDisabledReason } = useFlowExec();
   const { setNodes } = useReactFlow();
-  const environmentId = (data as { environmentId?: string } | undefined)?.environmentId ?? "";
+  const environmentFilename = (data as { environmentFilename?: string } | undefined)?.environmentFilename ?? "";
 
   const disabled = running || !canRun;
   const buttonLabel = running ? "Running…" : !canRun ? "Cannot run" : "Run Flow";
 
-  const setEnvironment = (envId: string) => {
+  const setEnvironment = (filename: string) => {
     setNodes((nds) =>
       nds.map((n) =>
         n.id === id
-          ? { ...n, data: { ...(n.data ?? {}), environmentId: envId || null } }
+          ? { ...n, data: { ...(n.data ?? {}), environmentFilename: filename || null } }
           : n,
       ),
     );
@@ -43,13 +43,13 @@ export function StartNode({ id, data }: NodeProps) {
             to the cursor as soon as you open the dropdown. */}
         <select
           className={`${s.envSelect} nodrag`}
-          value={environmentId}
+          value={environmentFilename}
           onChange={(e) => setEnvironment(e.target.value)}
           onClick={(e) => e.stopPropagation()}
         >
           <option value="">— none —</option>
           {environments.map((env) => (
-            <option key={env.id} value={env.id}>
+            <option key={env.filename} value={env.filename}>
               {env.name}
             </option>
           ))}

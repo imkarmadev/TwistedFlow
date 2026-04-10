@@ -1,14 +1,14 @@
-//! TwistedRest Tauri entry point.
+//! TwistedFlow Tauri entry point.
 //!
-//! Wires the SQLite connection into Tauri state, applies a native macOS
-//! NSVisualEffectView (Sidebar material) to the main window for true Apple
-//! Liquid Glass — no CSS backdrop-filter required.
+//! File-based project model — no SQLite. Projects are folders on disk
+//! with twistedflow.toml, flows/*.flow.json, .env* files.
 
-mod commands;
-mod db;
+mod executor_commands;
 mod http;
+mod project;
 
-use commands::AppState;
+// Ensure twistedflow-nodes is linked so inventory discovers all #[node] registrations.
+extern crate twistedflow_nodes;
 use std::sync::Mutex;
 use tauri::Manager;
 use tauri::menu::{Menu, MenuItem, Submenu, PredefinedMenuItem};
@@ -17,12 +17,13 @@ use tauri::menu::{Menu, MenuItem, Submenu, PredefinedMenuItem};
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             // ── Native macOS menu ────────────────────────────────
             let handle = app.handle();
 
-            let app_menu = Submenu::with_items(handle, "TwistedRest", true, &[
-                &PredefinedMenuItem::about(handle, Some("About TwistedRest"), None)?,
+            let app_menu = Submenu::with_items(handle, "TwistedFlow", true, &[
+                &PredefinedMenuItem::about(handle, Some("About TwistedFlow"), None)?,
                 &PredefinedMenuItem::separator(handle)?,
                 &PredefinedMenuItem::services(handle, None)?,
                 &PredefinedMenuItem::separator(handle)?,
@@ -55,7 +56,7 @@ pub fn run() {
             ])?;
 
             let help_menu = Submenu::with_items(handle, "Help", true, &[
-                &MenuItem::with_id(handle, "github", "TwistedRest on GitHub", true, None::<&str>)?,
+                &MenuItem::with_id(handle, "github", "TwistedFlow on GitHub", true, None::<&str>)?,
             ])?;
 
             let menu = Menu::with_items(handle, &[
@@ -67,49 +68,41 @@ pub fn run() {
             ])?;
             app.set_menu(menu)?;
 
-            // Handle custom menu item clicks
-            app.on_menu_event(move |app_handle, event| {
+            app.on_menu_event(move |_app_handle, event| {
                 if event.id() == "github" {
-                    let _ = open::that("https://github.com/imkarmadev/TwistedRest");
+                    let _ = open::that("https://github.com/imkarmadev/TwistedFlow");
                 }
             });
-            // ── Database ─────────────────────────────────────────
-            let app_data_dir = app
-                .path()
-                .app_data_dir()
-                .expect("could not resolve app_data_dir");
-            std::fs::create_dir_all(&app_data_dir).ok();
-            let db_path = app_data_dir.join("twistedrest.db");
-            let conn = db::open(&db_path).expect("failed to open database");
-            app.manage(AppState {
-                db: Mutex::new(conn),
-            });
-            println!("[twistedrest] db at {:?}", db_path);
 
-            // No vibrancy — the window is fully opaque, matching Mail.app's
-            // solid dark window. Native macOS draws the rounded corners and
-            // traffic lights via decorations:true + titleBarStyle:Overlay.
+            // Executor state (cancellation token for active run)
+            app.manage(executor_commands::ExecutorState {
+                cancel: Mutex::new(None),
+            });
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            commands::list_projects,
-            commands::get_project,
-            commands::create_project,
-            commands::update_project,
-            commands::delete_project,
-            commands::list_environments,
-            commands::create_environment,
-            commands::update_environment,
-            commands::delete_environment,
-            commands::list_flows,
-            commands::get_flow,
-            commands::create_flow,
-            commands::save_flow,
-            commands::rename_flow,
-            commands::delete_flow,
+            // Project (file-based)
+            project::create_project,
+            project::open_project,
+            project::list_flows,
+            project::get_flow,
+            project::save_flow,
+            project::create_flow,
+            project::delete_flow,
+            project::rename_flow,
+            project::list_environments,
+            project::save_environment,
+            project::create_environment,
+            project::delete_environment,
+            // HTTP
             http::http_request,
             http::oauth2_client_credentials,
             http::oauth2_authorize,
+            // Executor
+            executor_commands::run_flow,
+            executor_commands::stop_flow,
+            executor_commands::list_node_types,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
