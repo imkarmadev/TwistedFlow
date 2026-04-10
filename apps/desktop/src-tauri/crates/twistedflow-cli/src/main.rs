@@ -1,8 +1,10 @@
-//! TwistedFlow CLI — run flows headlessly.
+//! TwistedFlow CLI — run and build flows.
 //!
 //! Usage:
 //!   twistedflow run <flow.json>
-//!   twistedflow run <flow.json> --plugins ~/.twistedflow/plugins
+//!   twistedflow build <flow.json or project dir> -o <binary>
+
+mod build;
 
 // Ensure twistedflow-nodes is linked so inventory discovers all built-in nodes.
 extern crate twistedflow_nodes;
@@ -47,6 +49,19 @@ enum Commands {
         #[arg(long, short)]
         quiet: bool,
     },
+    /// Compile a flow or project into a standalone binary
+    Build {
+        /// Path to .flow.json file or project directory
+        input: PathBuf,
+
+        /// Output binary path
+        #[arg(short, long)]
+        output: String,
+
+        /// Debug build (faster compile, larger binary)
+        #[arg(long)]
+        debug: bool,
+    },
 }
 
 #[tokio::main]
@@ -63,6 +78,12 @@ async fn main() {
         } => {
             let code = run_flow(file, plugins, env_vars, base_url, quiet).await;
             std::process::exit(code);
+        }
+        Commands::Build { input, output, debug } => {
+            if let Err(e) = build::build(&input, &output, !debug) {
+                eprintln!("Build failed: {}", e);
+                std::process::exit(1);
+            }
         }
     }
 }
