@@ -194,6 +194,10 @@ pub enum NodeResult {
     Error { message: String, raw_response: Option<Value> },
     /// Pure data node — resolved lazily, returns a value.
     Data(Option<Value>),
+    /// Long-running process node. The node spawned its own background task
+    /// and returned immediately. Executor keeps the node marked as "running"
+    /// and does NOT advance to exec-out. The process runs until cancelled.
+    Process,
 }
 
 /// Runtime context available to every node during execution.
@@ -330,6 +334,66 @@ impl<'a> NodeCtx<'a> {
                 self.tap_logs.clone(),
             )
             .await
+        })
+    }
+
+    /// Spawn a long-running process task. Unlike spawn_chain, this goes into
+    /// the process registry which is NOT awaited by run_flow — it runs until
+    /// the cancel token fires.
+    pub async fn spawn_process<F>(&self, future: F)
+    where
+        F: Future<Output = ()> + Send + 'static,
+    {
+        let handle = tokio::spawn(future);
+        self.opts.processes.lock().await.push(handle);
+    }
+
+    /// Emit a named event — finds all OnEvent listeners with matching name,
+    /// writes payload to their outputs, and spawns their exec-out chains.
+    /// This is the same mechanism as the EmitEvent node but callable from
+    /// any node (especially process nodes).
+    pub fn emit_event(
+        &'a self,
+        event_name: &'a str,
+        payload: HashMap<String, Value>,
+    ) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>> {
+        Box::pin(async move {
+            // Find matching OnEvent listeners
+            let listeners: Vec<String> = self
+                .index
+                .nodes
+                .values()
+                .filter(|n| {
+                    n.node_type.as_deref() == Some("onEvent")
+                        && n.data
+                            .get("name")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            == event_name
+                })
+                .map(|n| n.id.clone())
+                .collect();
+
+            // Write payload to each listener's outputs and spawn their chains
+            for listener_id in &listeners {
+                {
+                    let mut out = self.outputs.lock().await;
+                    let entry = out.entry(listener_id.clone()).or_default();
+                    for (k, v) in &payload {
+                        entry.insert(k.clone(), v.clone());
+                    }
+                }
+                (self.opts.on_status)(
+                    listener_id,
+                    StatusEvent::ok(Some(
+                        serde_json::to_value(&payload).unwrap_or(Value::Null),
+                    )),
+                );
+
+                if let Some(next_id) = self.index.next_exec(listener_id, "exec-out") {
+                    self.spawn_chain(next_id).await;
+                }
+            }
         })
     }
 }

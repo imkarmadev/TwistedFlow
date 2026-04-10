@@ -187,6 +187,7 @@ async fn main() {{
         index, context, on_status, on_log, cancel,
         http_client: reqwest::Client::builder().user_agent("TwistedFlow-Built/1.0").build().unwrap(),
         registry,
+        processes: std::sync::Arc::new(tokio::sync::Mutex::new(Vec::new())),
     }});
 
     match twistedflow_engine::run_flow(opts).await {{

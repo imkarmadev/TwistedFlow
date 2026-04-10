@@ -22,6 +22,9 @@ pub struct RunFlowOpts {
     pub cancel: CancellationToken,
     pub http_client: reqwest::Client,
     pub registry: HashMap<&'static str, Box<dyn Node>>,
+    /// Process tasks spawned by process nodes. Separate from bg_tasks —
+    /// these run until cancelled, not until the chain completes.
+    pub processes: Arc<Mutex<Vec<tokio::task::JoinHandle<()>>>>,
 }
 
 /// Run a flow end-to-end. Resolves when execution completes.
@@ -112,6 +115,20 @@ pub async fn run_flow(opts: Arc<RunFlowOpts>) -> Result<(), String> {
         .await;
     }
 
+    // If process nodes are running, wait for cancellation (Ctrl+C / Stop button).
+    // The flow is "done" but processes keep serving until explicitly stopped.
+    let has_processes = !opts.processes.lock().await.is_empty();
+    if has_processes {
+        opts.cancel.cancelled().await;
+        // Give processes a moment to clean up
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        // Abort remaining process tasks
+        let procs = std::mem::take(&mut *opts.processes.lock().await);
+        for p in procs {
+            p.abort();
+        }
+    }
+
     Ok(())
 }
 
@@ -196,6 +213,12 @@ pub fn run_chain(
                 }
                 NodeResult::Data(_) => {
                     // Pure data node — skip in exec chain
+                }
+                NodeResult::Process => {
+                    // Process node spawned its background task and returned.
+                    // Keep it marked as "running" (don't emit ok/error).
+                    // Don't advance to exec-out — the chain stops here.
+                    return Ok(());
                 }
             }
         } else {

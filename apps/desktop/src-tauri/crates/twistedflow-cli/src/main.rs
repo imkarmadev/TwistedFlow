@@ -221,6 +221,7 @@ async fn run_flow(
         cancel,
         http_client,
         registry,
+        processes: std::sync::Arc::new(tokio::sync::Mutex::new(Vec::new())),
     });
 
     // 8. Run!

@@ -106,6 +106,7 @@ pub async fn run_flow(
         cancel: cancel.clone(),
         http_client,
         registry,
+        processes: std::sync::Arc::new(tokio::sync::Mutex::new(Vec::new())),
     });
 
     // Run the engine
