@@ -332,6 +332,39 @@ async function runChain(
       return;
     } else if (node.type === "emitEvent") {
       execEmitEvent(node, opts, outputs, bgPromises, tapLogs);
+    } else if (node.type === "envSetter") {
+      // Write a value into the runtime env vars. Updates all pre-seeded
+      // EnvVar node outputs with matching varKey so downstream reads see
+      // the new value immediately.
+      opts.onStatus(currentId, { status: "running" });
+      const setterData = node.data as { varKey?: string };
+      const varKey = setterData.varKey;
+      if (varKey) {
+        const inEdge = opts.edges.find(
+          (e) =>
+            e.target === currentId &&
+            e.data?.kind === "data" &&
+            e.targetHandle === "in:value",
+        );
+        let value: unknown;
+        if (inEdge) {
+          value = resolvePinValue(
+            inEdge.source,
+            inEdge.sourceHandle ?? "",
+            opts,
+            outputs,
+            tapLogs,
+          );
+        }
+        // Patch every EnvVar node that reads this key
+        for (const n of opts.nodes) {
+          if (n.type !== "envVar") continue;
+          if ((n.data as { varKey?: string })?.varKey === varKey) {
+            outputs[n.id] = { value };
+          }
+        }
+      }
+      opts.onStatus(currentId, { status: "ok" });
     } else if (node.type === "log") {
       // Resolve the value input, push to the console panel via onLog,
       // emit a status update, then continue to exec-out.

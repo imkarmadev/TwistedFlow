@@ -131,6 +131,12 @@ export function InspectorPanel({
             data={(node.data ?? {}) as Record<string, unknown>}
             onChange={(d) => onChange(node.id, d)}
           />
+        ) : node.type === "envSetter" ? (
+          <EnvSetterEditor
+            data={(node.data ?? {}) as Record<string, unknown>}
+            onChange={(d) => onChange(node.id, d)}
+            environments={environments}
+          />
         ) : node.type === "start" ? (
           <div className={s.hint}>
             Start node — entry point. The Environment dropdown lives on the
@@ -984,6 +990,38 @@ function OnEventEditor({ data, onChange }: OnEventEditorProps) {
           Must match an Emit Event's name exactly. Output pins are mirrored
           automatically from the matching emitter's payload — declare them
           on the emitter, not here.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Env Setter editor ──────────────────────────────────────────
+
+interface EnvSetterEditorProps {
+  data: Record<string, unknown>;
+  onChange: (data: Record<string, unknown>) => void;
+  environments: Environment[];
+}
+
+function EnvSetterEditor({ data, onChange, environments }: EnvSetterEditorProps) {
+  const varKey = (data.varKey as string) ?? "";
+
+  return (
+    <div className={s.form}>
+      <div className={s.field}>
+        <label className={s.label}>Variable Key</label>
+        <input
+          className={s.input}
+          value={varKey}
+          onChange={(e) => onChange({ ...data, varKey: e.target.value })}
+          placeholder="token"
+          spellCheck={false}
+        />
+        <div className={s.schemaHint}>
+          At runtime, writes the wired <code>value</code> into the env vars map
+          under this key. All downstream EnvVar nodes reading this key will see
+          the new value.
         </div>
       </div>
     </div>

@@ -141,6 +141,20 @@ export function computeBreakObjectPins(): ComputedPins {
  * Match node — switch/case routing. exec-in + value input on left;
  * one exec output per case + a default on right.
  */
+/**
+ * Env Setter — exec-chain node that writes a value into the runtime
+ * env vars. exec-in + exec-out + value data input.
+ */
+export function computeEnvSetterPins(): ComputedPins {
+  return {
+    inputs: [
+      EXEC_IN,
+      { id: "in:value", side: "left", label: "value", kind: "data", dataType: "unknown" },
+    ],
+    outputs: [EXEC_OUT],
+  };
+}
+
 export function computeMatchPins(
   cases: Array<{ value: string; label?: string }> = [],
 ): ComputedPins {

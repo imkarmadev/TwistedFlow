@@ -30,6 +30,7 @@ import { TapNode } from "../components/canvas/nodes/tap-node";
 import { LogNode } from "../components/canvas/nodes/log-node";
 import { MakeObjectNode } from "../components/canvas/nodes/make-object-node";
 import { FunctionNode } from "../components/canvas/nodes/function-node";
+import { EnvSetterNode } from "../components/canvas/nodes/env-setter-node";
 import { MatchNode } from "../components/canvas/nodes/match-node";
 
 export type NodeCategory =
@@ -134,6 +135,21 @@ export const NODE_REGISTRY: NodeTypeDef[] = [
     hasExecOut: false,
     hasDataIn: false,
     hasDataOut: true,
+    defaultData: () => ({ varKey: "" }),
+  },
+  {
+    type: "envSetter",
+    label: "Env Setter",
+    category: "Variables",
+    description: "Writes a value into the runtime env vars. Downstream EnvVar nodes see the updated value.",
+    component: EnvSetterNode,
+    hasExecIn: true,
+    hasExecOut: true,
+    hasDataIn: true,
+    hasDataOut: false,
+    defaultExecInPin: "exec-in",
+    defaultDataInPin: "in:value",
+    acceptsDataInput: () => true,
     defaultData: () => ({ varKey: "" }),
   },
   {

@@ -58,6 +58,7 @@ import {
   computeLogPins,
   computeMakeObjectPins,
   computeFunctionPins,
+  computeEnvSetterPins,
   computeMatchPins,
   computeEmitEventPins,
   computeOnEventPins,
@@ -915,6 +916,7 @@ function collectPinIds(node: Node): Set<string> {
     );
   else if (node.type === "tap") pins = computeTapPins();
   else if (node.type === "log") pins = computeLogPins();
+  else if (node.type === "envSetter") pins = computeEnvSetterPins();
   else if (node.type === "match")
     pins = computeMatchPins(
       (node.data as { cases?: Array<{ value: string; label?: string }> } | undefined)?.cases,
@@ -956,6 +958,7 @@ const KNOWN_TYPES = new Set([
   "makeObject",
   "function",
   "match",
+  "envSetter",
   "emitEvent",
   "onEvent",
 ]);
