@@ -68,7 +68,9 @@ pub async fn run_flow(opts: Arc<RunFlowOpts>) -> Result<(), String> {
             continue;
         }
         match node.node_type.as_deref() {
-            Some("envVar" | "breakObject" | "convert" | "tap") => continue,
+            Some("envVar" | "breakObject" | "convert" | "tap"
+                 | "parseArgs" | "regex" | "template" | "encodeDecode"
+                 | "hash" | "merge" | "getVariable") => continue,
             _ => {}
         }
         (opts.on_status)(&node.id, StatusEvent::pending());

@@ -64,6 +64,19 @@ import {
   computeMatchPins,
   computeEmitEventPins,
   computeOnEventPins,
+  computeParseArgsPins,
+  computeStdinPins,
+  computeStderrPins,
+  computePromptPins,
+  computeRegexPins,
+  computeTemplatePins,
+  computeEncodeDecodePins,
+  computeHashPins,
+  computeFilterPins,
+  computeMapPins,
+  computeMergePins,
+  computeReducePins,
+  computeRetryPins,
   type ComputedPins,
   type PayloadField,
 } from "../../lib/node-pins";
@@ -1085,7 +1098,28 @@ function collectPinIds(node: Node): Set<string> {
     // payload pins are protected from culling the same way Break-Object's
     // dynamic outputs are.
     pins = computeOnEventPins();
-  } else if (node.type === "customNode") {
+  }
+  // CLI nodes
+  else if (node.type === "parseArgs") pins = computeParseArgsPins();
+  else if (node.type === "stdin") pins = computeStdinPins();
+  else if (node.type === "stderr") pins = computeStderrPins();
+  else if (node.type === "prompt") pins = computePromptPins();
+  // String nodes
+  else if (node.type === "regex")
+    pins = computeRegexPins((node.data as { mode?: string } | undefined)?.mode);
+  else if (node.type === "template")
+    pins = computeTemplatePins((node.data as { template?: string } | undefined)?.template);
+  else if (node.type === "encodeDecode") pins = computeEncodeDecodePins();
+  else if (node.type === "hash")
+    pins = computeHashPins((node.data as { algorithm?: string } | undefined)?.algorithm);
+  // Data transform nodes
+  else if (node.type === "filter") pins = computeFilterPins();
+  else if (node.type === "map") pins = computeMapPins();
+  else if (node.type === "merge") pins = computeMergePins();
+  else if (node.type === "reduce") pins = computeReducePins();
+  // Flow control
+  else if (node.type === "retry") pins = computeRetryPins();
+  else if (node.type === "customNode") {
     const def = (node.data as Record<string, unknown>)?._customDef as
       | { inputs?: Array<{ key: string }>; outputs?: Array<{ key: string }>; isAsync?: boolean }
       | undefined;
@@ -1132,6 +1166,23 @@ const KNOWN_TYPES = new Set([
   "exit",
   "customNode",
   "pluginNode",
+  // CLI
+  "parseArgs",
+  "stdin",
+  "stderr",
+  "prompt",
+  // String
+  "regex",
+  "template",
+  "encodeDecode",
+  "hash",
+  // Data transform
+  "filter",
+  "map",
+  "merge",
+  "reduce",
+  // Flow control
+  "retry",
 ]);
 
 function kindToType(kind: string): string {

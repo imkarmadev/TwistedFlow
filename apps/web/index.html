@@ -6,7 +6,7 @@
   <title>TwistedFlow — Visual Flow Engine</title>
   <meta name="description" content="Visual flow engine — build APIs, servers, automations, and test suites by wiring nodes. Rust executor, WASM plugins, compile to standalone binaries." />
   <meta property="og:title" content="TwistedFlow — Visual Flow Engine" />
-  <meta property="og:description" content="Wire nodes, build flows, compile to binaries. 23 built-in nodes + WASM plugins. Desktop app + CLI." />
+  <meta property="og:description" content="Wire nodes, build flows, compile to binaries. 36 built-in nodes + WASM plugins. Desktop app + CLI." />
   <meta property="og:type" content="website" />
   <link rel="icon" href="public/favicon.ico" sizes="any" />
   <link rel="icon" type="image/png" sizes="192x192" href="public/icon-192.png" />
@@ -491,8 +491,8 @@
   <section id="nodes">
     <div class="container">
       <div class="section-header">
-        <h2>23 built-in nodes + WASM plugins</h2>
-        <p>Flow control, HTTP client &amp; server, system I/O, testing, variables — plus custom nodes via Rust WASM plugins.</p>
+        <h2>36 built-in nodes + WASM plugins</h2>
+        <p>Flow control, HTTP, CLI tools, string processing, data transforms, system I/O, testing — plus custom nodes via Rust WASM plugins.</p>
       </div>
 
       <div class="nodes-grid">
@@ -504,16 +504,29 @@
         <div class="node-pill"><div class="node-dot" style="background: var(--orange);"></div> Match</div>
         <div class="node-pill"><div class="node-dot" style="background: var(--orange);"></div> If / Else</div>
         <div class="node-pill"><div class="node-dot" style="background: var(--orange);"></div> Try / Catch</div>
+        <div class="node-pill"><div class="node-dot" style="background: var(--orange);"></div> Retry</div>
         <div class="node-pill"><div class="node-dot" style="background: var(--pink);"></div> ForEach (seq)</div>
         <div class="node-pill"><div class="node-dot" style="background: var(--red);"></div> ForEach (par)</div>
         <div class="node-pill"><div class="node-dot" style="background: #fcd34d;"></div> Emit Event</div>
         <div class="node-pill"><div class="node-dot" style="background: #fef3c7;"></div> On Event</div>
+        <div class="node-pill"><div class="node-dot" style="background: #f472b6;"></div> Parse Args</div>
+        <div class="node-pill"><div class="node-dot" style="background: #f472b6;"></div> Stdin</div>
+        <div class="node-pill"><div class="node-dot" style="background: #f472b6;"></div> Stderr</div>
+        <div class="node-pill"><div class="node-dot" style="background: #f472b6;"></div> Prompt</div>
+        <div class="node-pill"><div class="node-dot" style="background: var(--pink);"></div> Regex</div>
+        <div class="node-pill"><div class="node-dot" style="background: var(--pink);"></div> Template</div>
+        <div class="node-pill"><div class="node-dot" style="background: var(--pink);"></div> Encode/Decode</div>
+        <div class="node-pill"><div class="node-dot" style="background: var(--pink);"></div> Hash</div>
         <div class="node-pill"><div class="node-dot" style="background: var(--purple);"></div> Env Var</div>
         <div class="node-pill"><div class="node-dot" style="background: var(--purple);"></div> Set Variable</div>
         <div class="node-pill"><div class="node-dot" style="background: var(--purple);"></div> Get Variable</div>
         <div class="node-pill"><div class="node-dot" style="background: var(--orange);"></div> Break Object</div>
         <div class="node-pill"><div class="node-dot" style="background: #d8b4fe;"></div> Make Object</div>
         <div class="node-pill"><div class="node-dot" style="background: #99f6e4;"></div> Convert</div>
+        <div class="node-pill"><div class="node-dot" style="background: #bae6fd;"></div> Filter</div>
+        <div class="node-pill"><div class="node-dot" style="background: #bae6fd;"></div> Map</div>
+        <div class="node-pill"><div class="node-dot" style="background: #bae6fd;"></div> Merge</div>
+        <div class="node-pill"><div class="node-dot" style="background: #bae6fd;"></div> Reduce</div>
         <div class="node-pill"><div class="node-dot" style="background: #bae6fd;"></div> Tap</div>
         <div class="node-pill"><div class="node-dot" style="background: #a5f3fc;"></div> Log</div>
         <div class="node-pill"><div class="node-dot" style="background: #a5f3fc;"></div> Print</div>

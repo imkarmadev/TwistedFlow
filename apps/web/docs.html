@@ -533,12 +533,14 @@
 
       <div class="sidebar-group">
         <div class="sidebar-group-title">Nodes</div>
-        <a class="sidebar-link" href="#nodes" data-section="nodes">All 23 nodes</a>
+        <a class="sidebar-link" href="#nodes" data-section="nodes">All 36 nodes</a>
         <div class="sidebar-sub">
           <a class="sidebar-link" href="#nodes" data-scroll="nodes-flow">Flow Control</a>
           <a class="sidebar-link" href="#nodes" data-scroll="nodes-http">HTTP</a>
           <a class="sidebar-link" href="#nodes" data-scroll="nodes-data">Data</a>
           <a class="sidebar-link" href="#nodes" data-scroll="nodes-vars">Variables</a>
+          <a class="sidebar-link" href="#nodes" data-scroll="nodes-cli">CLI</a>
+          <a class="sidebar-link" href="#nodes" data-scroll="nodes-string">String</a>
           <a class="sidebar-link" href="#nodes" data-scroll="nodes-system">System</a>
           <a class="sidebar-link" href="#nodes" data-scroll="nodes-testing">Testing</a>
         </div>
@@ -574,7 +576,7 @@
 
         <h2 id="gs-overview">What is TwistedFlow?</h2>
         <p>TwistedFlow is a visual flow engine. You build automations, API clients, HTTP servers, test suites, and system tools by wiring nodes on a canvas. Then you run them in the desktop app, headlessly via CLI, or compile to standalone binaries.</p>
-        <p>There are <strong>23 built-in nodes</strong> covering flow control, HTTP client/server, data manipulation, variables, system I/O, and testing. You can extend TwistedFlow with custom nodes via <strong>WASM plugins</strong>.</p>
+        <p>There are <strong>36 built-in nodes</strong> covering flow control, HTTP client/server, CLI tools, string processing, data manipulation, variables, system I/O, and testing. You can extend TwistedFlow with custom nodes via <strong>WASM plugins</strong>.</p>
 
         <h2 id="gs-install">Installation</h2>
 
@@ -645,7 +647,7 @@ bun run dev</code></pre>
       <!-- ═══ NODES ═══ -->
       <section class="doc-section" id="nodes">
         <h1>Nodes Reference</h1>
-        <p class="subtitle">All 23 built-in nodes, organized by category.</p>
+        <p class="subtitle">All 36 built-in nodes across 8 categories.</p>
 
         <p>Every node has <strong>pins</strong>: exec pins (white diamonds) control flow order, data pins (colored circles) carry typed values. Drag pin to pin to wire them. Drag a pin to empty canvas to create a compatible node automatically.</p>
 
@@ -738,6 +740,20 @@ bun run dev</code></pre>
             <div class="pin-list">
               <span class="pin-tag exec">exec-out &rarr;</span>
               <span class="pin-tag out">payload</span>
+            </div>
+          </div>
+
+          <div class="node-card">
+            <div class="node-card-name">Retry</div>
+            <div class="node-card-desc">Re-execute a sub-chain with configurable retries and exponential backoff. If all attempts fail, routes to the <code>failed</code> branch.</div>
+            <div class="pin-list">
+              <span class="pin-tag exec">&rarr; exec-in</span>
+              <span class="pin-tag exec">body &rarr;</span>
+              <span class="pin-tag exec">out &rarr;</span>
+              <span class="pin-tag exec">failed &rarr;</span>
+              <span class="pin-tag out">attempts</span>
+              <span class="pin-tag out">succeeded</span>
+              <span class="pin-tag out">error</span>
             </div>
           </div>
         </div>
@@ -845,6 +861,142 @@ bun run dev</code></pre>
               <span class="pin-tag exec">&rarr; exec-in</span>
               <span class="pin-tag in">value</span>
               <span class="pin-tag exec">exec-out &rarr;</span>
+            </div>
+          </div>
+
+          <div class="node-card">
+            <div class="node-card-name">Filter</div>
+            <div class="node-card-desc">Filter array items by expression. Supports field comparisons like <code>item.status == 200</code>, <code>item.id &gt; 5</code>, <code>item.tags contains "urgent"</code>.</div>
+            <div class="pin-list">
+              <span class="pin-tag exec">&rarr; exec-in</span>
+              <span class="pin-tag in">array</span>
+              <span class="pin-tag exec">exec-out &rarr;</span>
+              <span class="pin-tag out">result</span>
+              <span class="pin-tag out">count</span>
+            </div>
+          </div>
+
+          <div class="node-card">
+            <div class="node-card-name">Map</div>
+            <div class="node-card-desc">Transform each item in an array. Modes: <code>pluck</code> (extract a single field), <code>pick</code> (select fields), <code>template</code> (format with <code>#{field}</code>).</div>
+            <div class="pin-list">
+              <span class="pin-tag exec">&rarr; exec-in</span>
+              <span class="pin-tag in">array</span>
+              <span class="pin-tag exec">exec-out &rarr;</span>
+              <span class="pin-tag out">result</span>
+              <span class="pin-tag out">count</span>
+            </div>
+          </div>
+
+          <div class="node-card">
+            <div class="node-card-name">Merge</div>
+            <div class="node-card-desc">Deep-merge objects or concatenate arrays. Auto-detects types. Two inputs: <code>a</code> and <code>b</code>. Modes: <code>deep</code>, <code>shallow</code>, <code>concat</code>, <code>auto</code>.</div>
+            <div class="pin-list">
+              <span class="pin-tag in">a</span>
+              <span class="pin-tag in">b</span>
+              <span class="pin-tag out">result</span>
+            </div>
+          </div>
+
+          <div class="node-card">
+            <div class="node-card-name">Reduce</div>
+            <div class="node-card-desc">Aggregate an array into a single value. Operations: <code>sum</code>, <code>count</code>, <code>join</code>, <code>min</code>, <code>max</code>, <code>first</code>, <code>last</code>, <code>flatten</code>, <code>unique</code>, <code>groupBy</code>.</div>
+            <div class="pin-list">
+              <span class="pin-tag exec">&rarr; exec-in</span>
+              <span class="pin-tag in">array</span>
+              <span class="pin-tag exec">exec-out &rarr;</span>
+              <span class="pin-tag out">result</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- CLI -->
+        <div class="node-group" id="nodes-cli">
+          <div class="node-group-title"><div class="node-group-dot" style="background: #f472b6;"></div> CLI</div>
+
+          <div class="node-card">
+            <div class="node-card-name">Parse Args</div>
+            <div class="node-card-desc">Parses CLI arguments into structured data. Handles <code>--flag value</code>, <code>-f</code> shorthand, <code>--flag=value</code>, and positional args. Pure data node &mdash; no exec pins needed.</div>
+            <div class="pin-list">
+              <span class="pin-tag out">flags</span>
+              <span class="pin-tag out">positional</span>
+              <span class="pin-tag out">raw</span>
+            </div>
+          </div>
+
+          <div class="node-card">
+            <div class="node-card-name">Stdin</div>
+            <div class="node-card-desc">Reads from standard input. Works with piped data (<code>cat data.json | twistedflow-cli run flow.json</code>). Outputs raw content, split lines, and parsed JSON.</div>
+            <div class="pin-list">
+              <span class="pin-tag exec">&rarr; exec-in</span>
+              <span class="pin-tag exec">exec-out &rarr;</span>
+              <span class="pin-tag out">content</span>
+              <span class="pin-tag out">lines</span>
+              <span class="pin-tag out">json</span>
+            </div>
+          </div>
+
+          <div class="node-card">
+            <div class="node-card-name">Stderr</div>
+            <div class="node-card-desc">Writes to stderr. Essential for CLI tools: data goes to stdout (via Print), progress/errors go to stderr (via Stderr). Same formatting as Print.</div>
+            <div class="pin-list">
+              <span class="pin-tag exec">&rarr; exec-in</span>
+              <span class="pin-tag in">value</span>
+              <span class="pin-tag exec">exec-out &rarr;</span>
+            </div>
+          </div>
+
+          <div class="node-card">
+            <div class="node-card-name">Prompt</div>
+            <div class="node-card-desc">Interactive user input. Modes: <code>text</code> (free input with optional default), <code>confirm</code> (y/n &rarr; boolean), <code>password</code> (hidden input). Message can be wired dynamically.</div>
+            <div class="pin-list">
+              <span class="pin-tag exec">&rarr; exec-in</span>
+              <span class="pin-tag in">message</span>
+              <span class="pin-tag exec">exec-out &rarr;</span>
+              <span class="pin-tag out">answer</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- String -->
+        <div class="node-group" id="nodes-string">
+          <div class="node-group-title"><div class="node-group-dot" style="background: var(--pink);"></div> String</div>
+
+          <div class="node-card">
+            <div class="node-card-name">Regex</div>
+            <div class="node-card-desc">Regular expression operations. Modes: <code>match</code> (test + capture groups), <code>extract</code> (all matches), <code>replace</code> (substitution), <code>split</code> (split by pattern). Supports case-insensitive flag.</div>
+            <div class="pin-list">
+              <span class="pin-tag in">value</span>
+              <span class="pin-tag out">matched / matches / result / parts</span>
+              <span class="pin-tag out">groups</span>
+            </div>
+          </div>
+
+          <div class="node-card">
+            <div class="node-card-name">Template</div>
+            <div class="node-card-desc">String interpolation with <code>#{var}</code> tokens. Same template syntax as HTTP Request URLs. Wire input pins to provide values. Pure data node.</div>
+            <div class="pin-list">
+              <span class="pin-tag in">dynamic inputs</span>
+              <span class="pin-tag out">result</span>
+            </div>
+          </div>
+
+          <div class="node-card">
+            <div class="node-card-name">Encode/Decode</div>
+            <div class="node-card-desc">Encoding conversion. Supports <code>base64</code>, <code>base64url</code>, <code>hex</code>, and <code>url</code> (percent-encoding). Toggle between encode and decode.</div>
+            <div class="pin-list">
+              <span class="pin-tag in">value</span>
+              <span class="pin-tag out">result</span>
+            </div>
+          </div>
+
+          <div class="node-card">
+            <div class="node-card-name">Hash</div>
+            <div class="node-card-desc">Cryptographic hashing. Algorithms: <code>sha256</code>, <code>sha512</code>, <code>md5</code>, <code>hmac-sha256</code> (with key pin). Output as hex or base64.</div>
+            <div class="pin-list">
+              <span class="pin-tag in">value</span>
+              <span class="pin-tag in">key (HMAC)</span>
+              <span class="pin-tag out">hash</span>
             </div>
           </div>
         </div>
@@ -997,6 +1149,7 @@ bun run dev</code></pre>
             <tr><td><code>--base-url URL</code></td><td>Base URL for HTTP requests</td></tr>
             <tr><td><code>--plugins DIR</code></td><td>Plugin directories (comma-separated). Default: <code>~/.twistedflow/plugins</code></td></tr>
             <tr><td><code>-q, --quiet</code></td><td>Only print errors</td></tr>
+            <tr><td><code>-- [args]</code></td><td>Pass arguments through to the flow (accessible via ParseArgs node)</td></tr>
           </tbody>
         </table>
 
@@ -1007,11 +1160,14 @@ bun run dev</code></pre>
 <span class="comment"># With env vars</span>
 <span class="cmd">twistedflow-cli</span> run ./flows/main.flow.json <span class="flag">-e</span> API_KEY=abc123 <span class="flag">-e</span> BASE_URL=https://api.example.com
 
-<span class="comment"># With base URL and quiet mode</span>
-<span class="cmd">twistedflow-cli</span> run ./flows/health-check.flow.json <span class="flag">--base-url</span> https://api.example.com <span class="flag">-q</span>
+<span class="comment"># Pass arguments to the flow (ParseArgs node reads these)</span>
+<span class="cmd">twistedflow-cli</span> run ./flows/my-tool.flow.json <span class="flag">--</span> --input data.json --verbose
 
-<span class="comment"># With custom plugin directory</span>
-<span class="cmd">twistedflow-cli</span> run ./flows/main.flow.json <span class="flag">--plugins</span> ./my-plugins,~/.twistedflow/plugins</code></pre>
+<span class="comment"># Pipe data into a flow (Stdin node reads this)</span>
+cat urls.txt | <span class="cmd">twistedflow-cli</span> run ./flows/check-urls.flow.json
+
+<span class="comment"># With base URL and quiet mode</span>
+<span class="cmd">twistedflow-cli</span> run ./flows/health-check.flow.json <span class="flag">--base-url</span> https://api.example.com <span class="flag">-q</span></code></pre>
 
         <h3>Output</h3>
         <p>Node status is printed to stderr. Log/Print node output goes to stdout. This means you can pipe flow output:</p>

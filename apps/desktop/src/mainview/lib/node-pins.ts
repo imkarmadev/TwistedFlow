@@ -369,3 +369,199 @@ export function computeForEachPins(): ComputedPins {
     ],
   };
 }
+
+// ── CLI node pins ─────────────────────────────────────────────────────
+
+export function computeParseArgsPins(): ComputedPins {
+  return {
+    inputs: [],
+    outputs: [
+      { id: "out:flags", side: "right", label: "flags", kind: "data", dataType: "object" },
+      { id: "out:positional", side: "right", label: "positional", kind: "data", dataType: "array" },
+      { id: "out:raw", side: "right", label: "raw", kind: "data", dataType: "array" },
+    ],
+  };
+}
+
+export function computeStdinPins(): ComputedPins {
+  return {
+    inputs: [EXEC_IN],
+    outputs: [
+      EXEC_OUT,
+      { id: "out:content", side: "right", label: "content", kind: "data", dataType: "string" },
+      { id: "out:lines", side: "right", label: "lines", kind: "data", dataType: "array" },
+      { id: "out:json", side: "right", label: "json", kind: "data", dataType: "unknown" },
+    ],
+  };
+}
+
+export function computeStderrPins(): ComputedPins {
+  return {
+    inputs: [
+      EXEC_IN,
+      { id: "in:value", side: "left", label: "value", kind: "data", dataType: "unknown" },
+    ],
+    outputs: [EXEC_OUT],
+  };
+}
+
+export function computePromptPins(): ComputedPins {
+  return {
+    inputs: [
+      EXEC_IN,
+      { id: "in:message", side: "left", label: "message", kind: "data", dataType: "string" },
+    ],
+    outputs: [
+      EXEC_OUT,
+      { id: "out:answer", side: "right", label: "answer", kind: "data", dataType: "string" },
+    ],
+  };
+}
+
+// ── String node pins ──────────────────────────────────────────────────
+
+export function computeRegexPins(mode?: string): ComputedPins {
+  const outputs: ComputedPin[] = (() => {
+    switch (mode) {
+      case "extract":
+        return [{ id: "out:matches", side: "right" as const, label: "matches", kind: "data" as const, dataType: "array" as DataType }];
+      case "replace":
+        return [{ id: "out:result", side: "right" as const, label: "result", kind: "data" as const, dataType: "string" as DataType }];
+      case "split":
+        return [{ id: "out:parts", side: "right" as const, label: "parts", kind: "data" as const, dataType: "array" as DataType }];
+      case "match":
+      default:
+        return [
+          { id: "out:matched", side: "right" as const, label: "matched", kind: "data" as const, dataType: "boolean" as DataType },
+          { id: "out:groups", side: "right" as const, label: "groups", kind: "data" as const, dataType: "array" as DataType },
+        ];
+    }
+  })();
+
+  return {
+    inputs: [
+      { id: "in:value", side: "left", label: "value", kind: "data", dataType: "string" },
+    ],
+    outputs,
+  };
+}
+
+export function computeTemplatePins(template?: string): ComputedPins {
+  const tokenSources: string[] = template ? [template] : [];
+  const seen = new Set<string>();
+  for (const src of tokenSources) {
+    for (const name of inputPinsFor(src)) seen.add(name);
+  }
+
+  const inputDataPins: ComputedPin[] = [...seen].map((name) => ({
+    id: `in:${name}`,
+    side: "left" as const,
+    label: name,
+    kind: "data" as const,
+    dataType: "unknown" as DataType,
+  }));
+
+  return {
+    inputs: inputDataPins,
+    outputs: [
+      { id: "out:result", side: "right", label: "result", kind: "data", dataType: "string" },
+    ],
+  };
+}
+
+export function computeEncodeDecodePins(): ComputedPins {
+  return {
+    inputs: [
+      { id: "in:value", side: "left", label: "value", kind: "data", dataType: "string" },
+    ],
+    outputs: [
+      { id: "out:result", side: "right", label: "result", kind: "data", dataType: "string" },
+    ],
+  };
+}
+
+export function computeHashPins(algorithm?: string): ComputedPins {
+  const inputs: ComputedPin[] = [
+    { id: "in:value", side: "left", label: "value", kind: "data", dataType: "string" },
+  ];
+  if (algorithm === "hmac-sha256") {
+    inputs.push({ id: "in:key", side: "left", label: "key", kind: "data", dataType: "string" });
+  }
+  return {
+    inputs,
+    outputs: [
+      { id: "out:hash", side: "right", label: "hash", kind: "data", dataType: "string" },
+    ],
+  };
+}
+
+// ── Data transform node pins ──────────────────────────────────────────
+
+export function computeFilterPins(): ComputedPins {
+  return {
+    inputs: [
+      EXEC_IN,
+      { id: "in:array", side: "left", label: "array", kind: "data", dataType: "array" },
+    ],
+    outputs: [
+      EXEC_OUT,
+      { id: "out:result", side: "right", label: "result", kind: "data", dataType: "array" },
+      { id: "out:count", side: "right", label: "count", kind: "data", dataType: "number" },
+    ],
+  };
+}
+
+export function computeMapPins(): ComputedPins {
+  return {
+    inputs: [
+      EXEC_IN,
+      { id: "in:array", side: "left", label: "array", kind: "data", dataType: "array" },
+    ],
+    outputs: [
+      EXEC_OUT,
+      { id: "out:result", side: "right", label: "result", kind: "data", dataType: "array" },
+      { id: "out:count", side: "right", label: "count", kind: "data", dataType: "number" },
+    ],
+  };
+}
+
+export function computeMergePins(): ComputedPins {
+  return {
+    inputs: [
+      { id: "in:a", side: "left", label: "a", kind: "data", dataType: "unknown" },
+      { id: "in:b", side: "left", label: "b", kind: "data", dataType: "unknown" },
+    ],
+    outputs: [
+      { id: "out:result", side: "right", label: "result", kind: "data", dataType: "unknown" },
+    ],
+  };
+}
+
+export function computeReducePins(): ComputedPins {
+  return {
+    inputs: [
+      EXEC_IN,
+      { id: "in:array", side: "left", label: "array", kind: "data", dataType: "array" },
+    ],
+    outputs: [
+      EXEC_OUT,
+      { id: "out:result", side: "right", label: "result", kind: "data", dataType: "unknown" },
+    ],
+  };
+}
+
+// ── Flow control node pins (new) ──────────────────────────────────────
+
+export function computeRetryPins(): ComputedPins {
+  return {
+    inputs: [EXEC_IN],
+    outputs: [
+      { id: "exec-body", side: "right", label: "body", kind: "exec" },
+      EXEC_OUT,
+      { id: "exec-failed", side: "right", label: "failed", kind: "exec" },
+      { id: "out:attempts", side: "right", label: "attempts", kind: "data", dataType: "number" },
+      { id: "out:succeeded", side: "right", label: "succeeded", kind: "data", dataType: "boolean" },
+      { id: "out:error", side: "right", label: "error", kind: "data", dataType: "string" },
+    ],
+  };
+}

@@ -131,6 +131,135 @@ const NODE_CONFIGS: Record<string, (data: Record<string, unknown>) => SystemNode
     outputs: [{ id: "out:matched", label: "matched", type: "boolean" }],
     noExec: true,
   }),
+  // ── CLI nodes ──────────────────────────────────────────────────
+  parseArgs: () => ({
+    badge: "CLI",
+    label: "Parse Args",
+    subtitle: "argv",
+    inputs: [],
+    outputs: [
+      { id: "out:flags", label: "flags", type: "object" },
+      { id: "out:positional", label: "positional", type: "array" },
+      { id: "out:raw", label: "raw", type: "array" },
+    ],
+    noExec: true,
+  }),
+  stdin: () => ({
+    badge: "CLI",
+    label: "Stdin",
+    subtitle: "read stdin",
+    inputs: [],
+    outputs: [
+      { id: "out:content", label: "content", type: "string" },
+      { id: "out:lines", label: "lines", type: "array" },
+      { id: "out:json", label: "json", type: "unknown" },
+    ],
+  }),
+  stderr: () => ({
+    badge: "CLI",
+    label: "Stderr",
+    subtitle: "stderr",
+    inputs: [{ id: "in:value", label: "value", type: "unknown" }],
+    outputs: [],
+  }),
+  prompt: (data) => ({
+    badge: "CLI",
+    label: "Prompt",
+    subtitle: (data.message as string)?.slice(0, 30) || "? ",
+    inputs: [{ id: "in:message", label: "message", type: "string" }],
+    outputs: [{ id: "out:answer", label: "answer", type: "string" }],
+  }),
+  // ── String nodes ───────────────────────────────────────────────
+  regex: (data) => ({
+    badge: "STR",
+    label: "Regex",
+    subtitle: (data.pattern as string)?.slice(0, 25) || "pattern",
+    inputs: [{ id: "in:value", label: "value", type: "string" }],
+    outputs: (() => {
+      const mode = (data.mode as string) || "match";
+      if (mode === "match") return [
+        { id: "out:matched", label: "matched", type: "boolean" as DataType },
+        { id: "out:groups", label: "groups", type: "array" as DataType },
+      ];
+      if (mode === "extract") return [
+        { id: "out:matches", label: "matches", type: "array" as DataType },
+      ];
+      if (mode === "replace") return [
+        { id: "out:result", label: "result", type: "string" as DataType },
+      ];
+      if (mode === "split") return [
+        { id: "out:parts", label: "parts", type: "array" as DataType },
+      ];
+      return [{ id: "out:result", label: "result", type: "string" as DataType }];
+    })(),
+    noExec: true,
+  }),
+  template: (data) => ({
+    badge: "STR",
+    label: "Template",
+    subtitle: (data.template as string)?.slice(0, 25) || "#{var}",
+    inputs: [{ id: "in:value", label: "value", type: "unknown" }],
+    outputs: [{ id: "out:result", label: "result", type: "string" }],
+    noExec: true,
+  }),
+  encodeDecode: (data) => ({
+    badge: "STR",
+    label: "Encode/Decode",
+    subtitle: `${data.encoding ?? "base64"} ${data.direction ?? "encode"}`,
+    inputs: [{ id: "in:value", label: "value", type: "string" }],
+    outputs: [{ id: "out:result", label: "result", type: "string" }],
+    noExec: true,
+  }),
+  hash: (data) => ({
+    badge: "STR",
+    label: "Hash",
+    subtitle: (data.algorithm as string) || "sha256",
+    inputs: [
+      { id: "in:value", label: "value", type: "string" },
+      ...((data.algorithm as string) === "hmac-sha256" ? [{ id: "in:key", label: "key", type: "string" as DataType }] : []),
+    ],
+    outputs: [{ id: "out:hash", label: "hash", type: "string" }],
+    noExec: true,
+  }),
+  // ── Data transform nodes ──────────────────────────────────────
+  filter: (data) => ({
+    badge: "DATA",
+    label: "Filter",
+    subtitle: (data.expression as string)?.slice(0, 25) || "expression",
+    inputs: [{ id: "in:array", label: "array", type: "array" }],
+    outputs: [
+      { id: "out:result", label: "result", type: "array" },
+      { id: "out:count", label: "count", type: "number" },
+    ],
+  }),
+  map: (data) => ({
+    badge: "DATA",
+    label: "Map",
+    subtitle: (data.mode as string) || "pluck",
+    inputs: [{ id: "in:array", label: "array", type: "array" }],
+    outputs: [
+      { id: "out:result", label: "result", type: "array" },
+      { id: "out:count", label: "count", type: "number" },
+    ],
+  }),
+  merge: (data) => ({
+    badge: "DATA",
+    label: "Merge",
+    subtitle: (data.mode as string) || "auto",
+    inputs: [
+      { id: "in:a", label: "a", type: "unknown" },
+      { id: "in:b", label: "b", type: "unknown" },
+    ],
+    outputs: [{ id: "out:result", label: "result", type: "unknown" }],
+    noExec: true,
+  }),
+  reduce: (data) => ({
+    badge: "DATA",
+    label: "Reduce",
+    subtitle: (data.operation as string) || "sum",
+    inputs: [{ id: "in:array", label: "array", type: "array" }],
+    outputs: [{ id: "out:result", label: "result", type: "unknown" }],
+  }),
 };
 
 export function SystemNode({ id, data, selected, type }: NodeProps) {

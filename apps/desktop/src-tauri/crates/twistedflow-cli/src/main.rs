@@ -48,6 +48,10 @@ enum Commands {
         /// Quiet mode — only print errors
         #[arg(long, short)]
         quiet: bool,
+
+        /// Extra arguments passed through to the flow (accessible via ParseArgs node)
+        #[arg(last = true)]
+        flow_args: Vec<String>,
     },
     /// Compile a flow into a standalone binary
     Build {
@@ -83,6 +87,7 @@ async fn main() {
             env_vars,
             base_url,
             quiet,
+            flow_args: _, // flow_args are available via std::env::args() for ParseArgs node
         } => {
             let code = run_flow(file, plugins, env_vars, base_url, quiet).await;
             std::process::exit(code);

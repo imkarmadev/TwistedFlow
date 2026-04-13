@@ -14,3 +14,8 @@ reqwest = { workspace = true }
 log = { workspace = true }
 inventory = "0.3"
 base64 = "0.22"
+regex = { workspace = true }
+sha2 = "0.10"
+md-5 = "0.10"
+hmac = "0.12"
+urlencoding = "2"

@@ -29,6 +29,27 @@ pub mod shell_exec_node;
 pub mod sleep_node;
 pub mod start;
 
+// ── CLI nodes ───────────────────────────────────────────────────────────────
+pub mod parse_args;
+pub mod stdin_node;
+pub mod stderr_node;
+pub mod prompt_node;
+
+// ── String nodes ────────────────────────────────────────────────────────────
+pub mod regex_node;
+pub mod template_node;
+pub mod encode_decode_node;
+pub mod hash_node;
+
+// ── Data transform nodes ────────────────────────────────────────────────────
+pub mod filter_node;
+pub mod map_node;
+pub mod merge_node;
+pub mod reduce_node;
+
+// ── Flow control (new) ─────────────────────────────────────────────────────
+pub mod retry_node;
+
 // ── Pure-data nodes ─────────────────────────────────────────────────────────
 pub mod break_object;
 pub mod convert;
@@ -64,3 +85,24 @@ pub use shell_exec_node::ShellExecNode;
 pub use sleep_node::SleepNode;
 pub use start::StartNode;
 pub use tap::TapNode;
+
+// CLI
+pub use parse_args::ParseArgsNode;
+pub use stdin_node::StdinNode;
+pub use stderr_node::StderrNode;
+pub use prompt_node::PromptNode;
+
+// String
+pub use regex_node::RegexNode;
+pub use template_node::TemplateNode;
+pub use encode_decode_node::EncodeDecodeNode;
+pub use hash_node::HashNode;
+
+// Data transform
+pub use filter_node::FilterNode;
+pub use map_node::MapNode;
+pub use merge_node::MergeNode;
+pub use reduce_node::ReduceNode;
+
+// Flow control
+pub use retry_node::RetryNode;
