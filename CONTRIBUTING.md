@@ -1,6 +1,6 @@
 # Contributing to TwistedFlow
 
-Thanks for your interest in contributing! TwistedFlow is an open-source visual API workflow builder, and we welcome contributions of all kinds — bug reports, feature ideas, code, docs, and example flows.
+Thanks for your interest in contributing! TwistedFlow is an open-source visual flow engine, and we welcome contributions of all kinds — bug reports, feature ideas, code, docs, and example flows.
 
 ## Getting Started
 
@@ -32,7 +32,7 @@ First Rust compile takes ~30s. Subsequent rebuilds are <5s. Vite provides HMR fo
 
 ```bash
 bun run test              # all packages via Turbo
-cd packages/core && bun test   # just the core tests
+cd packages/core && bun test   # just core JS tests
 bun test --watch          # watch mode
 ```
 
@@ -47,16 +47,25 @@ bun run typecheck         # all packages
 ```
 TwistedFlow/
 ├── apps/
-│   ├── desktop/              # Tauri desktop app
-│   │   ├── src-tauri/        # Rust backend (SQLite, HTTP, OAuth2)
-│   │   └── src/mainview/     # React frontend
-│   └── web/                  # Landing page (static HTML)
+│   ├── desktop/                    # Tauri desktop app
+│   │   ├── src-tauri/              # Rust workspace (5 crates)
+│   │   │   ├── src/                # Tauri app shell (commands, project I/O, HTTP bridge)
+│   │   │   └── crates/
+│   │   │       ├── twistedflow-engine/   # Pure async executor, graph, templates, WASM host
+│   │   │       ├── twistedflow-nodes/    # 23 built-in nodes via #[node] macro
+│   │   │       ├── twistedflow-macros/   # #[node] proc macro + inventory registration
+│   │   │       ├── twistedflow-cli/      # CLI binary (run + build subcommands)
+│   │   │       └── twistedflow-plugin/   # Guest SDK for WASM plugin authors
+│   │   └── src/mainview/           # React frontend
+│   └── web/                        # Landing page (static HTML)
 ├── packages/
-│   ├── core/                 # Executor, templates, schemas, tests
-│   └── shared/               # Zod domain models
-├── examples/                 # Importable .flow.json files
-└── scripts/                  # Release tooling
+│   ├── core/                       # JS utilities (pin helpers, template parser, schema tools)
+│   └── shared/                     # Shared TypeScript types
+├── examples/                       # Importable .flow.json files
+└── scripts/                        # Release tooling
 ```
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for a deep dive into how everything fits together.
 
 ## How to Contribute
 
@@ -79,33 +88,49 @@ Open an issue with:
 
 1. **Fork** the repo and create a branch from `main`
 2. **Make your changes** — keep commits focused and descriptive
-3. **Add tests** if you're touching `packages/core` (executor, templates, schemas)
+3. **Add tests** if you're touching execution logic
 4. **Run `bun run test && bun run typecheck`** to verify nothing breaks
 5. **Open a PR** with a clear description of what and why
 
 ### Adding a New Node Type
 
-This is the most common type of contribution. Here's the checklist:
+Nodes have two halves: a Rust implementation (execution) and a React component (rendering).
+
+#### Rust side (execution)
+
+1. **Node file** — create `crates/twistedflow-nodes/src/your_node.rs`
+2. **Use the `#[node]` macro** — it auto-registers via `inventory`. Define `metadata()` (name, category, pins) and `execute()`.
+3. **Re-export** — add `mod your_node;` in `crates/twistedflow-nodes/src/lib.rs`
+4. That's it — the macro + inventory system handles registration automatically.
+
+#### Frontend side (rendering)
 
 1. **Component** — `apps/desktop/src/mainview/components/canvas/nodes/your-node.tsx`
 2. **Pin computer** — add `computeYourNodePins()` in `lib/node-pins.ts`
 3. **Registry entry** — add to `lib/node-registry.ts` (label, category, description, pin flags, factory)
-4. **Inspector editor** — add a section in `components/inspector/inspector-panel.tsx`
-5. **Executor handler** — add a case in `packages/core/src/executor.ts` (in `runChain` for exec nodes, or `resolvePinValue` for pure-data nodes)
-6. **Schema resolution** — if the node has typed outputs, add a case in `lib/schema-resolution.ts`
-7. **CSS** — header gradient + badge in `nodes/node.module.css`
-8. **collectPinIds + KNOWN_TYPES** — update both in `flow-canvas.tsx`
-9. **Tests** — add at least one test in `packages/core/src/executor.test.ts`
+4. **Inspector editor** — add a section in `components/inspector/inspector-panel.tsx` if the node has editable config
+5. **Schema resolution** — if the node has typed outputs, add a case in `lib/schema-resolution.ts`
+6. **CSS** — header gradient + badge in `nodes/node.module.css`
+
+#### Verify
+
+- Create a test flow in `~/Desktop/test-project/flows/` that exercises the node
+- Test in the desktop app and via `twistedflow-cli run`
+
+### Adding a WASM Plugin Node
+
+For nodes distributed as plugins (not built-in):
+
+1. Create a Rust project that depends on `twistedflow-plugin`
+2. Implement the guest trait
+3. Compile to `.wasm`
+4. Drop in `~/.twistedflow/plugins/` or `{project}/nodes/`
+
+See `examples/plugins/` for a reference.
 
 ### Contributing Example Flows
 
-Example flows live in `/examples` as `.flow.json` files. They're importable via the sidebar's "+ import" button.
-
-To create one:
-1. Build the flow in TwistedFlow
-2. Export it (click the ↓ icon on the flow in the sidebar)
-3. Rename the file descriptively (e.g., `github-pr-checker.flow.json`)
-4. Add it to `/examples` via PR
+Example flows live in `/examples` as `.flow.json` files. They're importable via the sidebar.
 
 Good examples:
 - Exercise multiple node types
@@ -115,20 +140,20 @@ Good examples:
 
 ## Code Style
 
+- **Rust** — `rustfmt`, standard Rust conventions. Execution logic goes in crates, not the Tauri app.
 - **TypeScript** — strict mode, no `any` unless necessary
 - **CSS Modules** — `.module.css` files, design tokens from `app.css`
 - **No Tailwind** — we use CSS custom properties + CSS Modules
 - **Imports** — workspace packages via `@twistedflow/core`, `@twistedflow/shared`
-- **Rust** — standard `rustfmt` formatting
 
 ## Release Process
 
 Releases are automated via `bun run release`:
 
 ```bash
-bun run release patch    # 0.2.0 → 0.2.1
-bun run release minor    # 0.2.0 → 0.3.0
-bun run release major    # 0.2.0 → 1.0.0
+bun run release patch    # 1.0.0 -> 1.0.1
+bun run release minor    # 1.0.0 -> 1.1.0
+bun run release major    # 1.0.0 -> 2.0.0
 ```
 
 This bumps versions across all config files, commits, tags, and pushes. GitHub Actions builds the binaries and attaches them to the release.

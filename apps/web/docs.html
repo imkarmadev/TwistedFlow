@@ -1,0 +1,1250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Docs — TwistedFlow</title>
+  <meta name="description" content="TwistedFlow documentation — getting started, node reference, CLI, WASM plugins, project structure." />
+  <link rel="icon" href="public/favicon.ico" sizes="any" />
+  <link rel="icon" type="image/png" sizes="192x192" href="public/icon-192.png" />
+  <link rel="apple-touch-icon" href="public/apple-touch-icon.png" />
+  <style>
+    /* ── Reset + tokens ────────────────────────────────────── */
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg: #0a0d14;
+      --bg-elevated: #11151f;
+      --bg-card: #161b2a;
+      --text: #e8e8ed;
+      --text-secondary: #8e8e93;
+      --text-muted: #636366;
+      --accent: #4cc2ff;
+      --accent-glow: rgba(76, 194, 255, 0.15);
+      --accent-border: rgba(76, 194, 255, 0.3);
+      --green: #2ecc71;
+      --pink: #ff5fb1;
+      --purple: #c177ff;
+      --orange: #ffa726;
+      --red: #ff4757;
+      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --mono: "SF Mono", "Fira Code", "Cascadia Code", ui-monospace, monospace;
+      --max-w: 1200px;
+      --sidebar-w: 240px;
+      --nav-h: 64px;
+    }
+
+    html {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ── Nav ───────────────────────────────────────────────── */
+    nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      background: rgba(10, 13, 20, 0.85);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+
+    nav .nav-inner {
+      max-width: var(--max-w);
+      margin: 0 auto;
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: var(--nav-h);
+    }
+
+    .nav-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 700;
+      font-size: 18px;
+      color: var(--text);
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 32px;
+      list-style: none;
+    }
+
+    .nav-links a {
+      color: var(--text-secondary);
+      font-size: 14px;
+      font-weight: 500;
+      transition: color 0.15s;
+    }
+
+    .nav-links a:hover { color: var(--text); text-decoration: none; }
+    .nav-links a.active { color: var(--text); }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 22px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      font-family: var(--font);
+      border: none;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #000;
+    }
+
+    .btn-primary:hover {
+      background: #6bd0ff;
+      text-decoration: none;
+      transform: translateY(-1px);
+      box-shadow: 0 8px 24px rgba(76, 194, 255, 0.25);
+    }
+
+    /* ── Mobile menu toggle ───────────────────────────────── */
+    .menu-toggle {
+      display: none;
+      background: none;
+      border: none;
+      color: var(--text-secondary);
+      font-size: 24px;
+      cursor: pointer;
+      padding: 4px 8px;
+    }
+
+    /* ── Docs layout ──────────────────────────────────────── */
+    .docs-layout {
+      display: grid;
+      grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
+      max-width: var(--max-w);
+      margin: 0 auto;
+      padding: 0 24px;
+      min-height: 100vh;
+      padding-top: var(--nav-h);
+    }
+
+    /* ── Sidebar ──────────────────────────────────────────── */
+    .docs-sidebar {
+      position: sticky;
+      top: var(--nav-h);
+      height: calc(100vh - var(--nav-h));
+      overflow-y: auto;
+      padding: 32px 24px 32px 0;
+      border-right: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .docs-sidebar::-webkit-scrollbar { width: 4px; }
+    .docs-sidebar::-webkit-scrollbar-track { background: transparent; }
+    .docs-sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+
+    .sidebar-group { margin-bottom: 24px; }
+
+    .sidebar-group-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+      padding-left: 12px;
+    }
+
+    .sidebar-link {
+      display: block;
+      padding: 7px 12px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      transition: all 0.15s;
+      cursor: pointer;
+    }
+
+    .sidebar-link:hover {
+      color: var(--text);
+      background: rgba(255,255,255,0.04);
+      text-decoration: none;
+    }
+
+    .sidebar-link.active {
+      color: var(--accent);
+      background: var(--accent-glow);
+    }
+
+    .sidebar-sub {
+      padding-left: 12px;
+    }
+
+    .sidebar-sub .sidebar-link {
+      font-size: 13px;
+      padding: 5px 12px;
+      color: var(--text-muted);
+    }
+
+    .sidebar-sub .sidebar-link:hover {
+      color: var(--text-secondary);
+    }
+
+    /* ── Content ──────────────────────────────────────────── */
+    .docs-content {
+      padding: 48px 0 80px 48px;
+      min-width: 0;
+    }
+
+    .doc-section {
+      display: none;
+    }
+
+    .doc-section.active {
+      display: block;
+    }
+
+    .doc-section h1 {
+      font-size: 36px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 8px;
+    }
+
+    .doc-section > .subtitle {
+      font-size: 18px;
+      color: var(--text-secondary);
+      margin-bottom: 48px;
+      line-height: 1.5;
+    }
+
+    .doc-section h2 {
+      font-size: 24px;
+      font-weight: 600;
+      margin-top: 56px;
+      margin-bottom: 16px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .doc-section h2:first-of-type {
+      margin-top: 0;
+    }
+
+    .doc-section h3 {
+      font-size: 18px;
+      font-weight: 600;
+      margin-top: 32px;
+      margin-bottom: 12px;
+    }
+
+    .doc-section p {
+      font-size: 15px;
+      color: var(--text-secondary);
+      line-height: 1.7;
+      margin-bottom: 16px;
+      max-width: 720px;
+    }
+
+    .doc-section ul, .doc-section ol {
+      margin-bottom: 16px;
+      padding-left: 24px;
+    }
+
+    .doc-section li {
+      font-size: 15px;
+      color: var(--text-secondary);
+      line-height: 1.7;
+      margin-bottom: 6px;
+    }
+
+    .doc-section strong {
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    .doc-section code {
+      font-family: var(--mono);
+      font-size: 13px;
+      background: rgba(255,255,255,0.06);
+      padding: 2px 7px;
+      border-radius: 4px;
+      color: var(--pink);
+    }
+
+    pre {
+      background: var(--bg-card);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 8px;
+      padding: 20px 24px;
+      overflow-x: auto;
+      margin-bottom: 24px;
+      max-width: 720px;
+    }
+
+    pre code {
+      background: none;
+      padding: 0;
+      color: var(--text);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .comment { color: var(--text-muted); }
+    .flag { color: var(--orange); }
+    .str { color: var(--green); }
+    .cmd { color: var(--accent); }
+
+    /* ── Tables ───────────────────────────────────────────── */
+    .doc-table {
+      width: 100%;
+      max-width: 720px;
+      border-collapse: collapse;
+      margin-bottom: 24px;
+      font-size: 14px;
+    }
+
+    .doc-table th {
+      text-align: left;
+      padding: 10px 16px;
+      font-weight: 600;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+
+    .doc-table td {
+      padding: 10px 16px;
+      color: var(--text-secondary);
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      vertical-align: top;
+    }
+
+    .doc-table td:first-child {
+      color: var(--text);
+      font-weight: 500;
+      white-space: nowrap;
+    }
+
+    /* ── Node cards ───────────────────────────────────────── */
+    .node-group {
+      margin-bottom: 48px;
+    }
+
+    .node-group-title {
+      font-size: 14px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .node-group-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 2px;
+      flex-shrink: 0;
+    }
+
+    .node-card {
+      background: var(--bg-card);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 10px;
+      padding: 20px 24px;
+      margin-bottom: 12px;
+      max-width: 720px;
+    }
+
+    .node-card-name {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 6px;
+      color: var(--text);
+    }
+
+    .node-card-desc {
+      font-size: 14px;
+      color: var(--text-secondary);
+      line-height: 1.6;
+      margin-bottom: 12px;
+    }
+
+    .pin-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .pin-tag {
+      font-size: 12px;
+      font-family: var(--mono);
+      padding: 3px 8px;
+      border-radius: 4px;
+      background: rgba(255,255,255,0.04);
+      color: var(--text-muted);
+    }
+
+    .pin-tag.exec { color: var(--text-secondary); }
+    .pin-tag.in { color: var(--accent); }
+    .pin-tag.out { color: var(--green); }
+
+    /* ── Callout ──────────────────────────────────────────── */
+    .callout {
+      background: var(--accent-glow);
+      border: 1px solid var(--accent-border);
+      border-radius: 8px;
+      padding: 16px 20px;
+      margin-bottom: 24px;
+      max-width: 720px;
+    }
+
+    .callout p {
+      color: var(--text);
+      margin-bottom: 0;
+      font-size: 14px;
+    }
+
+    .callout strong {
+      color: var(--accent);
+    }
+
+    /* ── Footer ────────────────────────────────────────────── */
+    footer {
+      padding: 48px 0;
+      border-top: 1px solid rgba(255,255,255,0.04);
+      text-align: center;
+    }
+
+    footer p {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    /* ── File tree ────────────────────────────────────────── */
+    .file-tree {
+      background: var(--bg-card);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 8px;
+      padding: 20px 24px;
+      margin-bottom: 24px;
+      max-width: 720px;
+      font-family: var(--mono);
+      font-size: 13px;
+      line-height: 1.8;
+      color: var(--text-secondary);
+    }
+
+    .file-tree .dir { color: var(--accent); }
+    .file-tree .file { color: var(--text-secondary); }
+    .file-tree .note { color: var(--text-muted); font-style: italic; }
+
+    /* ── Responsive ────────────────────────────────────────── */
+    @media (max-width: 900px) {
+      .docs-layout {
+        grid-template-columns: 1fr;
+      }
+
+      .docs-sidebar {
+        position: fixed;
+        top: var(--nav-h);
+        left: 0;
+        right: 0;
+        height: auto;
+        max-height: calc(100vh - var(--nav-h));
+        background: var(--bg);
+        border-right: none;
+        border-bottom: 1px solid rgba(255,255,255,0.06);
+        padding: 16px 24px;
+        z-index: 50;
+        display: none;
+        overflow-y: auto;
+      }
+
+      .docs-sidebar.open {
+        display: block;
+      }
+
+      .menu-toggle {
+        display: block;
+      }
+
+      .docs-content {
+        padding: 32px 0 80px 0;
+      }
+
+      .nav-links { display: none; }
+    }
+
+    @media (max-width: 768px) {
+      pre { padding: 16px; }
+      .doc-table { font-size: 13px; }
+      .doc-table th, .doc-table td { padding: 8px 10px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Nav -->
+  <nav>
+    <div class="nav-inner">
+      <div class="nav-brand">
+        <a href="index.html" style="color: var(--text); text-decoration: none;">TwistedFlow</a>
+      </div>
+      <button class="menu-toggle" onclick="document.querySelector('.docs-sidebar').classList.toggle('open')" aria-label="Toggle menu">&#9776;</button>
+      <ul class="nav-links">
+        <li><a href="docs.html" class="active">Docs</a></li>
+        <li><a href="https://github.com/imkarmadev/TwistedFlow" target="_blank">GitHub</a></li>
+        <li><a href="https://github.com/imkarmadev/TwistedFlow/releases" class="btn btn-primary" target="_blank">Download</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <!-- Docs layout -->
+  <div class="docs-layout">
+
+    <!-- Sidebar -->
+    <aside class="docs-sidebar">
+      <div class="sidebar-group">
+        <div class="sidebar-group-title">Getting Started</div>
+        <a class="sidebar-link active" href="#getting-started" data-section="getting-started">Introduction</a>
+        <div class="sidebar-sub">
+          <a class="sidebar-link" href="#getting-started" data-scroll="gs-install">Installation</a>
+          <a class="sidebar-link" href="#getting-started" data-scroll="gs-first-flow">First flow</a>
+        </div>
+      </div>
+
+      <div class="sidebar-group">
+        <div class="sidebar-group-title">Nodes</div>
+        <a class="sidebar-link" href="#nodes" data-section="nodes">All 23 nodes</a>
+        <div class="sidebar-sub">
+          <a class="sidebar-link" href="#nodes" data-scroll="nodes-flow">Flow Control</a>
+          <a class="sidebar-link" href="#nodes" data-scroll="nodes-http">HTTP</a>
+          <a class="sidebar-link" href="#nodes" data-scroll="nodes-data">Data</a>
+          <a class="sidebar-link" href="#nodes" data-scroll="nodes-vars">Variables</a>
+          <a class="sidebar-link" href="#nodes" data-scroll="nodes-system">System</a>
+          <a class="sidebar-link" href="#nodes" data-scroll="nodes-testing">Testing</a>
+        </div>
+      </div>
+
+      <div class="sidebar-group">
+        <div class="sidebar-group-title">CLI</div>
+        <a class="sidebar-link" href="#cli" data-section="cli">CLI reference</a>
+        <div class="sidebar-sub">
+          <a class="sidebar-link" href="#cli" data-scroll="cli-run">Run</a>
+          <a class="sidebar-link" href="#cli" data-scroll="cli-build">Build</a>
+        </div>
+      </div>
+
+      <div class="sidebar-group">
+        <div class="sidebar-group-title">Plugins</div>
+        <a class="sidebar-link" href="#plugins" data-section="plugins">WASM plugins</a>
+      </div>
+
+      <div class="sidebar-group">
+        <div class="sidebar-group-title">Projects</div>
+        <a class="sidebar-link" href="#projects" data-section="projects">Project structure</a>
+      </div>
+    </aside>
+
+    <!-- Content -->
+    <main class="docs-content">
+
+      <!-- ═══ GETTING STARTED ═══ -->
+      <section class="doc-section active" id="getting-started">
+        <h1>Getting Started</h1>
+        <p class="subtitle">Install TwistedFlow, create your first flow, and run it.</p>
+
+        <h2 id="gs-overview">What is TwistedFlow?</h2>
+        <p>TwistedFlow is a visual flow engine. You build automations, API clients, HTTP servers, test suites, and system tools by wiring nodes on a canvas. Then you run them in the desktop app, headlessly via CLI, or compile to standalone binaries.</p>
+        <p>There are <strong>23 built-in nodes</strong> covering flow control, HTTP client/server, data manipulation, variables, system I/O, and testing. You can extend TwistedFlow with custom nodes via <strong>WASM plugins</strong>.</p>
+
+        <h2 id="gs-install">Installation</h2>
+
+        <h3>Desktop App</h3>
+        <p>Download the latest release for your platform:</p>
+        <ul>
+          <li><strong>macOS</strong> (ARM + Intel) &mdash; <code>.dmg</code></li>
+          <li><strong>Linux</strong> (x64) &mdash; <code>.AppImage</code> or <code>.deb</code></li>
+        </ul>
+        <p>Grab it from <a href="https://github.com/imkarmadev/TwistedFlow/releases" target="_blank">GitHub Releases</a>.</p>
+
+        <h3>CLI</h3>
+        <p>The CLI binary is included in the release. You can also build it from source:</p>
+        <pre><code><span class="comment"># Clone and build</span>
+git clone https://github.com/imkarmadev/TwistedFlow.git
+cd TwistedFlow/apps/desktop/src-tauri
+cargo build --release -p twistedflow-cli
+
+<span class="comment"># Binary is at target/release/twistedflow-cli</span></code></pre>
+
+        <h3>From Source (Development)</h3>
+        <p>Prerequisites: <strong>macOS or Linux</strong>, <a href="https://bun.sh" target="_blank">Bun</a> >= 1.2, <a href="https://rustup.rs" target="_blank">Rust</a> >= 1.77, Xcode CLI tools on macOS.</p>
+        <pre><code>git clone https://github.com/imkarmadev/TwistedFlow.git
+cd TwistedFlow
+bun install
+
+cd apps/desktop
+bun run dev</code></pre>
+        <p>First Rust compile takes ~30s. After that, rebuilds are &lt;5s.</p>
+
+        <h2 id="gs-first-flow">Your first flow</h2>
+
+        <h3>1. Create a project</h3>
+        <p>Open TwistedFlow and create a new project. This creates a folder on disk with a <code>twistedflow.toml</code> file and a <code>flows/</code> directory.</p>
+
+        <h3>2. Add nodes</h3>
+        <p>Right-click the canvas (or press <strong>Space</strong>) to open the node palette. Add these nodes:</p>
+        <ul>
+          <li><strong>Start</strong> &mdash; the entry point</li>
+          <li><strong>HTTP Request</strong> &mdash; set the URL to <code>https://jsonplaceholder.typicode.com/users/1</code></li>
+          <li><strong>Log</strong> &mdash; to print the response</li>
+        </ul>
+
+        <h3>3. Wire them up</h3>
+        <p>Connect the exec pins (white diamonds) in order: Start &rarr; HTTP Request &rarr; Log. Then drag the HTTP Request's <code>body</code> output pin to the Log's <code>value</code> input pin.</p>
+
+        <h3>4. Run it</h3>
+        <p>Click the <strong>Run</strong> button (or use the Start node's play button). The flow executes and you'll see the JSON response in the console panel (toggle with <kbd>`</kbd> backtick key).</p>
+
+        <h3>5. Run from CLI</h3>
+        <pre><code>twistedflow-cli run ~/my-project/flows/main.flow.json</code></pre>
+
+        <h2>Keyboard shortcuts</h2>
+        <table class="doc-table">
+          <thead><tr><th>Key</th><th>Action</th></tr></thead>
+          <tbody>
+            <tr><td><kbd>Right-click</kbd></td><td>Open node palette at cursor</td></tr>
+            <tr><td><kbd>Space</kbd></td><td>Open node palette at center</td></tr>
+            <tr><td><kbd>`</kbd></td><td>Toggle console panel</td></tr>
+            <tr><td><kbd>M</kbd></td><td>Toggle minimap</td></tr>
+            <tr><td><kbd>Backspace</kbd></td><td>Delete selected node or edge</td></tr>
+            <tr><td><kbd>Cmd+Z</kbd></td><td>Undo</td></tr>
+            <tr><td><kbd>Cmd+Shift+Z</kbd></td><td>Redo</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- ═══ NODES ═══ -->
+      <section class="doc-section" id="nodes">
+        <h1>Nodes Reference</h1>
+        <p class="subtitle">All 23 built-in nodes, organized by category.</p>
+
+        <p>Every node has <strong>pins</strong>: exec pins (white diamonds) control flow order, data pins (colored circles) carry typed values. Drag pin to pin to wire them. Drag a pin to empty canvas to create a compatible node automatically.</p>
+
+        <!-- Flow Control -->
+        <div class="node-group" id="nodes-flow">
+          <div class="node-group-title"><div class="node-group-dot" style="background: var(--green);"></div> Flow Control</div>
+
+          <div class="node-card">
+            <div class="node-card-name">Start</div>
+            <div class="node-card-desc">Entry point for every flow. Execution begins here. Every flow needs exactly one Start node.</div>
+            <div class="pin-list">
+              <span class="pin-tag exec">exec-out &rarr;</span>
+            </div>
+          </div>
+
+          <div class="node-card">
+            <div class="node-card-name">If / Else</div>
+            <div class="node-card-desc">Boolean branching. Evaluates a condition and routes to the <code>true</code> or <code>false</code> exec path.</div>
+            <div class="pin-list">
+              <span class="pin-tag exec">&rarr; exec-in</span>
+              <span class="pin-tag in">condition</span>
+              <span class="pin-tag exec">true &rarr;</span>
+              <span class="pin-tag exec">false &rarr;</span>
+            </div>
+          </div>
+
+          <div class="node-card">
+            <div class="node-card-name">Match</div>
+            <div class="node-card-desc">Switch/case routing. Compares a value against named cases, fires the matching branch. Great for routing on HTTP status codes.</div>
+            <div class="pin-list">
+              <span class="pin-tag exec">&rarr; exec-in</span>
+              <span class="pin-tag in">value</span>
+              <span class="pin-tag exec">case-1 &rarr;</span>
+              <span class="pin-tag exec">case-2 &rarr;</span>
+              <span class="pin-tag exec">default &rarr;</span>
+            </div>
+          </div>
+
+          <div class="node-card">
+            <div class="node-card-name">ForEach (Sequential)</div>
+            <div class="node-card-desc">Iterates an array, runs the body chain once per item in order. The current item and index are available as output pins.</div>
+            <div class="pin-list">
+              <span class="pin-tag exec">&rarr; exec-in</span>
+              <span class="pin-tag in">array</span>
+              <span class="pin-tag exec">body &rarr;</span>
+              <span class="pin-tag out">item</span>
+              <span class="pin-tag out">index</span>
+              <span class="pin-tag exec">done &rarr;</span>
+            </div>
+          </div>
+
+          <div class="node-card">
+            <div class="node-card-name">ForEach (Parallel)</div>
+            <div class="node-card-desc">Same as ForEach Sequential, but runs all iterations concurrently. Faster for independent operations like batch API calls.</div>
+            <div class="pin-list">
+              <span class="pin-tag exec">&rarr; exec-in</span>
+              <span class="pin-tag in">array</span>
+              <span class="pin-tag exec">body &rarr;</span>
+              <span class="pin-tag out">item</span>
+              <span class="pin-tag out">index</span>
+              <span class="pin-tag exec">done &rarr;</span>
+            </div>
+          </div>
+
+          <div class="node-card">
+            <div class="node-card-name">Try / Catch</div>
+            <div class="node-card-desc">Error boundary. Runs the <code>try</code> branch; if any node in it fails, routes to the <code>catch</code> branch with the error message.</div>
+            <div class="pin-list">
+              <span class="pin-tag exec">&rarr; exec-in</span>
+              <span class="pin-tag exec">try &rarr;</span>
+              <span class="pin-tag exec">catch &rarr;</span>
+              <span class="pin-tag out">error</span>
+            </div>
+          </div>
+
+          <div class="node-card">
+            <div class="node-card-name">EmitEvent</div>
+            <div class="node-card-desc">Broadcasts a named event with a payload. All matching OnEvent listeners fire their chains in parallel.</div>
+            <div class="pin-list">
+              <span class="pin-tag exec">&rarr; exec-in</span>
+              <span class="pin-tag in">event name</span>
+              <span class="pin-tag in">payload</span>
+              <span class="pin-tag exec">exec-out &rarr;</span>
+            </div>
+          </div>
+
+          <div class="node-card">
+            <div class="node-card-name">OnEvent</div>
+            <div class="node-card-desc">Listens for a named event. When the event fires, this node's exec chain runs. Output pins mirror the emitter's payload.</div>
+            <div class="pin-list">
+              <span class="pin-tag exec">exec-out &rarr;</span>
+              <span class="pin-tag out">payload</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- HTTP -->
+        <div class="node-group" id="nodes-http">
+          <div class="node-group-title"><div class="node-group-dot" style="background: var(--accent);"></div> HTTP</div>
+
+          <div class="node-card">
+            <div class="node-card-name">Request</div>
+            <div class="node-card-desc">Fires an HTTP request. Supports all methods (GET, POST, PUT, DELETE, PATCH, etc.). URL supports <code>#{token}</code> templates. Configure headers, body, and optional Zod response schema in the inspector.</div>
+            <div class="pin-list">
+              <span class="pin-tag exec">&rarr; exec-in</span>
+              <span class="pin-tag in">url (template)</span>
+              <span class="pin-tag in">body (template)</span>
+              <span class="pin-tag exec">exec-out &rarr;</span>
+              <span class="pin-tag out">body</span>
+              <span class="pin-tag out">status</span>
+              <span class="pin-tag out">headers</span>
+            </div>
+          </div>
+
+          <div class="node-card">
+            <div class="node-card-name">Listen</div>
+            <div class="node-card-desc">Starts an HTTP server on a specified port. This is a <strong>process node</strong> &mdash; it stays alive until the flow is stopped. Incoming requests trigger the exec chain.</div>
+            <div class="pin-list">
+              <span class="pin-tag exec">&rarr; exec-in</span>
+              <span class="pin-tag in">port</span>
+              <span class="pin-tag exec">on-request &rarr;</span>
+              <span class="pin-tag out">request</span>
+            </div>
+          </div>
+
+          <div class="node-card">
+            <div class="node-card-name">Route Match</div>
+            <div class="node-card-desc">Matches incoming HTTP requests by method and path pattern. Place after Listen to route requests to different handlers.</div>
+            <div class="pin-list">
+              <span class="pin-tag exec">&rarr; exec-in</span>
+              <span class="pin-tag in">request</span>
+              <span class="pin-tag exec">matched &rarr;</span>
+              <span class="pin-tag out">params</span>
+              <span class="pin-tag out">body</span>
+            </div>
+          </div>
+
+          <div class="node-card">
+            <div class="node-card-name">Send Response</div>
+            <div class="node-card-desc">Sends an HTTP response back to the client. Set status code, headers, and body. Use at the end of a Listen chain.</div>
+            <div class="pin-list">
+              <span class="pin-tag exec">&rarr; exec-in</span>
+              <span class="pin-tag in">status</span>
+              <span class="pin-tag in">body</span>
+              <span class="pin-tag in">headers</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Data -->
+        <div class="node-group" id="nodes-data">
+          <div class="node-group-title"><div class="node-group-dot" style="background: var(--purple);"></div> Data</div>
+
+          <div class="node-card">
+            <div class="node-card-name">BreakObject</div>
+            <div class="node-card-desc">Splits an object into one output pin per field. Introspects the source schema at design time &mdash; pins update automatically when you wire a different source.</div>
+            <div class="pin-list">
+              <span class="pin-tag in">object</span>
+              <span class="pin-tag out">field-1</span>
+              <span class="pin-tag out">field-2</span>
+              <span class="pin-tag out">...</span>
+            </div>
+          </div>
+
+          <div class="node-card">
+            <div class="node-card-name">MakeObject</div>
+            <div class="node-card-desc">Assembles an object from named typed input pins. The inverse of BreakObject. Add fields in the inspector.</div>
+            <div class="pin-list">
+              <span class="pin-tag in">field-1</span>
+              <span class="pin-tag in">field-2</span>
+              <span class="pin-tag out">object</span>
+            </div>
+          </div>
+
+          <div class="node-card">
+            <div class="node-card-name">Convert</div>
+            <div class="node-card-desc">Type coercion between string, number, integer, boolean, and JSON. Smart &mdash; detects the source type and filters valid target conversions.</div>
+            <div class="pin-list">
+              <span class="pin-tag in">value</span>
+              <span class="pin-tag out">result</span>
+            </div>
+          </div>
+
+          <div class="node-card">
+            <div class="node-card-name">Tap</div>
+            <div class="node-card-desc">Pass-through debug probe. Shows every value that flows through it inline on the canvas. Accumulates values across parallel iterations.</div>
+            <div class="pin-list">
+              <span class="pin-tag in">value</span>
+              <span class="pin-tag out">value</span>
+            </div>
+          </div>
+
+          <div class="node-card">
+            <div class="node-card-name">Log</div>
+            <div class="node-card-desc">Exec-chain print sink. Writes values to the bottom console panel with timestamps. Toggle the console with the backtick key.</div>
+            <div class="pin-list">
+              <span class="pin-tag exec">&rarr; exec-in</span>
+              <span class="pin-tag in">value</span>
+              <span class="pin-tag exec">exec-out &rarr;</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Variables -->
+        <div class="node-group" id="nodes-vars">
+          <div class="node-group-title"><div class="node-group-dot" style="background: var(--orange);"></div> Variables</div>
+
+          <div class="node-card">
+            <div class="node-card-name">EnvVar</div>
+            <div class="node-card-desc">Reads a value from the active <code>.env</code> file. Configure the variable name in the inspector. The value is resolved at flow start.</div>
+            <div class="pin-list">
+              <span class="pin-tag out">value</span>
+            </div>
+          </div>
+
+          <div class="node-card">
+            <div class="node-card-name">SetVariable</div>
+            <div class="node-card-desc">Sets a runtime variable by name. Variables persist for the duration of the flow run. Use with GetVariable for state that crosses branches.</div>
+            <div class="pin-list">
+              <span class="pin-tag exec">&rarr; exec-in</span>
+              <span class="pin-tag in">value</span>
+              <span class="pin-tag exec">exec-out &rarr;</span>
+            </div>
+          </div>
+
+          <div class="node-card">
+            <div class="node-card-name">GetVariable</div>
+            <div class="node-card-desc">Reads a runtime variable set by SetVariable. Returns null if the variable hasn't been set yet.</div>
+            <div class="pin-list">
+              <span class="pin-tag out">value</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- System -->
+        <div class="node-group" id="nodes-system">
+          <div class="node-group-title"><div class="node-group-dot" style="background: #93c5fd;"></div> System</div>
+
+          <div class="node-card">
+            <div class="node-card-name">Print</div>
+            <div class="node-card-desc">Writes to stdout. Most useful in CLI/binary mode where there's no canvas. In the desktop app, output appears in the console panel.</div>
+            <div class="pin-list">
+              <span class="pin-tag exec">&rarr; exec-in</span>
+              <span class="pin-tag in">value</span>
+              <span class="pin-tag exec">exec-out &rarr;</span>
+            </div>
+          </div>
+
+          <div class="node-card">
+            <div class="node-card-name">ShellExec</div>
+            <div class="node-card-desc">Runs a shell command and captures stdout, stderr, and exit code as output pins.</div>
+            <div class="pin-list">
+              <span class="pin-tag exec">&rarr; exec-in</span>
+              <span class="pin-tag in">command</span>
+              <span class="pin-tag exec">exec-out &rarr;</span>
+              <span class="pin-tag out">stdout</span>
+              <span class="pin-tag out">stderr</span>
+              <span class="pin-tag out">exitCode</span>
+            </div>
+          </div>
+
+          <div class="node-card">
+            <div class="node-card-name">FileRead</div>
+            <div class="node-card-desc">Reads a file from disk and outputs its content as a string.</div>
+            <div class="pin-list">
+              <span class="pin-tag exec">&rarr; exec-in</span>
+              <span class="pin-tag in">path</span>
+              <span class="pin-tag exec">exec-out &rarr;</span>
+              <span class="pin-tag out">content</span>
+            </div>
+          </div>
+
+          <div class="node-card">
+            <div class="node-card-name">FileWrite</div>
+            <div class="node-card-desc">Writes content to a file on disk. Creates the file if it doesn't exist.</div>
+            <div class="pin-list">
+              <span class="pin-tag exec">&rarr; exec-in</span>
+              <span class="pin-tag in">path</span>
+              <span class="pin-tag in">content</span>
+              <span class="pin-tag exec">exec-out &rarr;</span>
+            </div>
+          </div>
+
+          <div class="node-card">
+            <div class="node-card-name">Sleep</div>
+            <div class="node-card-desc">Pauses execution for a specified duration in milliseconds.</div>
+            <div class="pin-list">
+              <span class="pin-tag exec">&rarr; exec-in</span>
+              <span class="pin-tag in">ms</span>
+              <span class="pin-tag exec">exec-out &rarr;</span>
+            </div>
+          </div>
+
+          <div class="node-card">
+            <div class="node-card-name">Exit</div>
+            <div class="node-card-desc">Exits the flow with a status code. Code 0 means success, anything else means failure. Most useful in CLI/binary mode.</div>
+            <div class="pin-list">
+              <span class="pin-tag exec">&rarr; exec-in</span>
+              <span class="pin-tag in">code</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Testing -->
+        <div class="node-group" id="nodes-testing">
+          <div class="node-group-title"><div class="node-group-dot" style="background: #4ade80;"></div> Testing</div>
+
+          <div class="node-card">
+            <div class="node-card-name">Assert</div>
+            <div class="node-card-desc">Asserts that a condition is true. If the assertion fails, the flow errors with the assertion message. Use for building test suites.</div>
+            <div class="pin-list">
+              <span class="pin-tag exec">&rarr; exec-in</span>
+              <span class="pin-tag in">condition</span>
+              <span class="pin-tag in">message</span>
+              <span class="pin-tag exec">exec-out &rarr;</span>
+            </div>
+          </div>
+
+          <div class="node-card">
+            <div class="node-card-name">AssertType</div>
+            <div class="node-card-desc">Asserts that a value matches an expected type (string, number, boolean, object, array). Fails the flow if the type doesn't match.</div>
+            <div class="pin-list">
+              <span class="pin-tag exec">&rarr; exec-in</span>
+              <span class="pin-tag in">value</span>
+              <span class="pin-tag in">expected type</span>
+              <span class="pin-tag exec">exec-out &rarr;</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══ CLI ═══ -->
+      <section class="doc-section" id="cli">
+        <h1>CLI Reference</h1>
+        <p class="subtitle">Run flows headlessly and compile them to standalone binaries.</p>
+
+        <p>The CLI binary is <code>twistedflow-cli</code>. It shares the same Rust engine as the desktop app &mdash; same executor, same nodes, same WASM plugin support.</p>
+
+        <h2 id="cli-run">twistedflow-cli run</h2>
+        <p>Run a <code>.flow.json</code> file headlessly.</p>
+
+        <pre><code><span class="cmd">twistedflow-cli</span> run &lt;file&gt; [options]</code></pre>
+
+        <table class="doc-table">
+          <thead><tr><th>Option</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>&lt;file&gt;</code></td><td>Path to the <code>.flow.json</code> file</td></tr>
+            <tr><td><code>-e, --env KEY=VAL</code></td><td>Set environment variables (repeatable)</td></tr>
+            <tr><td><code>--base-url URL</code></td><td>Base URL for HTTP requests</td></tr>
+            <tr><td><code>--plugins DIR</code></td><td>Plugin directories (comma-separated). Default: <code>~/.twistedflow/plugins</code></td></tr>
+            <tr><td><code>-q, --quiet</code></td><td>Only print errors</td></tr>
+          </tbody>
+        </table>
+
+        <h3>Examples</h3>
+        <pre><code><span class="comment"># Basic run</span>
+<span class="cmd">twistedflow-cli</span> run ./flows/main.flow.json
+
+<span class="comment"># With env vars</span>
+<span class="cmd">twistedflow-cli</span> run ./flows/main.flow.json <span class="flag">-e</span> API_KEY=abc123 <span class="flag">-e</span> BASE_URL=https://api.example.com
+
+<span class="comment"># With base URL and quiet mode</span>
+<span class="cmd">twistedflow-cli</span> run ./flows/health-check.flow.json <span class="flag">--base-url</span> https://api.example.com <span class="flag">-q</span>
+
+<span class="comment"># With custom plugin directory</span>
+<span class="cmd">twistedflow-cli</span> run ./flows/main.flow.json <span class="flag">--plugins</span> ./my-plugins,~/.twistedflow/plugins</code></pre>
+
+        <h3>Output</h3>
+        <p>Node status is printed to stderr. Log/Print node output goes to stdout. This means you can pipe flow output:</p>
+        <pre><code><span class="cmd">twistedflow-cli</span> run ./flows/transform.flow.json | jq '.result'</code></pre>
+
+        <h2 id="cli-build">twistedflow-cli build</h2>
+        <p>Compile a project into a standalone binary. The binary embeds the flow JSON and environment variables &mdash; just run it, no arguments needed.</p>
+
+        <pre><code><span class="cmd">twistedflow-cli</span> build &lt;project&gt; [options]</code></pre>
+
+        <table class="doc-table">
+          <thead><tr><th>Option</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>&lt;project&gt;</code></td><td>Path to the project folder (must contain <code>twistedflow.toml</code>)</td></tr>
+            <tr><td><code>-o, --output NAME</code></td><td>Output binary name</td></tr>
+            <tr><td><code>--flow NAME</code></td><td>Which flow to compile (default: first in <code>flows/</code>)</td></tr>
+            <tr><td><code>--env NAME</code></td><td>Which <code>.env</code> file to embed (default: <code>.env</code>)</td></tr>
+            <tr><td><code>--release</code></td><td>Build with optimizations (slower compile, faster binary)</td></tr>
+          </tbody>
+        </table>
+
+        <h3>Examples</h3>
+        <pre><code><span class="comment"># Build with defaults</span>
+<span class="cmd">twistedflow-cli</span> build ~/my-project <span class="flag">-o</span> my-app
+
+<span class="comment"># Build specific flow with prod env</span>
+<span class="cmd">twistedflow-cli</span> build ~/my-project <span class="flag">-o</span> health-checker <span class="flag">--flow</span> health-check <span class="flag">--env</span> prod
+
+<span class="comment"># Build optimized release binary</span>
+<span class="cmd">twistedflow-cli</span> build ~/my-project <span class="flag">-o</span> my-app <span class="flag">--release</span>
+
+<span class="comment"># Run the compiled binary</span>
+./my-app</code></pre>
+
+        <div class="callout">
+          <p><strong>Tip:</strong> The desktop app also has a Build button in the canvas toolbar that opens a native save dialog and compiles via CLI under the hood.</p>
+        </div>
+
+        <h2>Exit codes</h2>
+        <table class="doc-table">
+          <thead><tr><th>Code</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td><code>0</code></td><td>Flow completed successfully</td></tr>
+            <tr><td><code>1</code></td><td>Flow failed (node error, assertion failure, etc.)</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- ═══ PLUGINS ═══ -->
+      <section class="doc-section" id="plugins">
+        <h1>WASM Plugins</h1>
+        <p class="subtitle">Extend TwistedFlow with custom nodes written in Rust (or anything that compiles to WASM).</p>
+
+        <h2>How it works</h2>
+        <p>TwistedFlow uses <a href="https://wasmtime.dev" target="_blank">wasmtime</a> to load WebAssembly modules as custom node types. Plugins appear in the node palette alongside built-in nodes.</p>
+
+        <h2>Plugin locations</h2>
+        <p>Plugins are loaded from two directories:</p>
+        <ol>
+          <li><code>~/.twistedflow/plugins/</code> &mdash; global plugins, available in all projects</li>
+          <li><code>{project}/nodes/</code> &mdash; project-scoped plugins, only available in that project</li>
+        </ol>
+        <p>Drop a <code>.wasm</code> file into either directory. It's picked up automatically on the next flow run.</p>
+
+        <h2>Writing a plugin</h2>
+        <p>Use the <code>twistedflow-plugin</code> guest SDK crate to write plugins in Rust.</p>
+
+        <h3>1. Create a new Rust project</h3>
+        <pre><code>cargo new my-node --lib
+cd my-node</code></pre>
+
+        <h3>2. Add the SDK dependency</h3>
+        <pre><code><span class="comment"># Cargo.toml</span>
+[lib]
+crate-type = [<span class="str">"cdylib"</span>]
+
+[dependencies]
+twistedflow-plugin = { path = <span class="str">"path/to/twistedflow-plugin"</span> }</code></pre>
+
+        <h3>3. Implement the node</h3>
+        <p>Implement the guest trait from the SDK. Define your node's metadata (name, category, pins) and execution logic.</p>
+
+        <h3>4. Compile to WASM</h3>
+        <pre><code>cargo build --target wasm32-wasi --release
+<span class="comment"># Output: target/wasm32-wasi/release/my_node.wasm</span></code></pre>
+
+        <h3>5. Install</h3>
+        <pre><code><span class="comment"># Global install</span>
+cp target/wasm32-wasi/release/my_node.wasm ~/.twistedflow/plugins/
+
+<span class="comment"># Or project-scoped</span>
+cp target/wasm32-wasi/release/my_node.wasm ~/my-project/nodes/</code></pre>
+
+        <div class="callout">
+          <p><strong>Future:</strong> A plugin marketplace is planned where you can publish and discover community-built node packs.</p>
+        </div>
+      </section>
+
+      <!-- ═══ PROJECTS ═══ -->
+      <section class="doc-section" id="projects">
+        <h1>Project Structure</h1>
+        <p class="subtitle">TwistedFlow projects are plain folders on disk. No database, git-friendly by default.</p>
+
+        <h2>Folder layout</h2>
+        <div class="file-tree">
+          <span class="dir">my-project/</span><br>
+          &nbsp;&nbsp;<span class="file">twistedflow.toml</span> <span class="note">&mdash; project name</span><br>
+          &nbsp;&nbsp;<span class="file">.env</span> <span class="note">&mdash; default environment</span><br>
+          &nbsp;&nbsp;<span class="file">.env.dev</span> <span class="note">&mdash; dev environment</span><br>
+          &nbsp;&nbsp;<span class="file">.env.prod</span> <span class="note">&mdash; prod environment</span><br>
+          &nbsp;&nbsp;<span class="dir">flows/</span><br>
+          &nbsp;&nbsp;&nbsp;&nbsp;<span class="file">main.flow.json</span><br>
+          &nbsp;&nbsp;&nbsp;&nbsp;<span class="file">health-check.flow.json</span><br>
+          &nbsp;&nbsp;<span class="dir">nodes/</span> <span class="note">&mdash; project WASM plugins</span><br>
+          &nbsp;&nbsp;&nbsp;&nbsp;<span class="file">my-custom-node.wasm</span>
+        </div>
+
+        <h2>twistedflow.toml</h2>
+        <p>Minimal config file. Currently just holds the project name:</p>
+        <pre><code>name = <span class="str">"My Project"</span></code></pre>
+
+        <h2>Environments (.env files)</h2>
+        <p>Standard <a href="https://dotenv.org" target="_blank">dotenv</a> format. Each <code>.env</code> file is an environment:</p>
+
+        <table class="doc-table">
+          <thead><tr><th>File</th><th>Environment</th></tr></thead>
+          <tbody>
+            <tr><td><code>.env</code></td><td>Default (always loaded as fallback)</td></tr>
+            <tr><td><code>.env.dev</code></td><td>Development</td></tr>
+            <tr><td><code>.env.staging</code></td><td>Staging</td></tr>
+            <tr><td><code>.env.prod</code></td><td>Production</td></tr>
+          </tbody>
+        </table>
+
+        <p>Access env vars in flows via the <strong>EnvVar</strong> node. Wire the output pin to wherever you need the value.</p>
+
+        <pre><code><span class="comment"># .env.dev</span>
+API_KEY=dev-key-12345
+BASE_URL=http://localhost:3000
+DEBUG=true</code></pre>
+
+        <h2>Flows (.flow.json)</h2>
+        <p>Each flow is a JSON file in the <code>flows/</code> directory. A flow contains:</p>
+        <ul>
+          <li><strong>nodes</strong> &mdash; array of node objects (type, position, config, pins)</li>
+          <li><strong>edges</strong> &mdash; array of connections between pins</li>
+          <li><strong>viewport</strong> &mdash; saved zoom/pan position</li>
+        </ul>
+        <p>Flows are created and edited in the desktop app. You can also export/import them as <code>.flow.json</code> files.</p>
+
+        <h2>Git workflow</h2>
+        <p>Since projects are just files, they work naturally with git:</p>
+        <pre><code>cd my-project
+git init
+git add .
+git commit -m <span class="str">"initial flow"</span>
+
+<span class="comment"># Collaborate</span>
+git push origin main</code></pre>
+
+        <div class="callout">
+          <p><strong>Tip:</strong> Add <code>.env.prod</code> to your <code>.gitignore</code> if it contains secrets. Use <code>.env.prod.example</code> as a template.</p>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- Footer -->
+  <footer>
+    <div class="container" style="max-width: var(--max-w); margin: 0 auto; padding: 0 24px;">
+      <p>TwistedFlow &mdash; Open source, MIT licensed. Created by human + robot with &lt;3</p>
+    </div>
+  </footer>
+
+  <!-- Hash router -->
+  <script>
+    const sections = document.querySelectorAll('.doc-section');
+    const sidebarLinks = document.querySelectorAll('.sidebar-link[data-section]');
+    const sidebar = document.querySelector('.docs-sidebar');
+
+    function showSection(id) {
+      sections.forEach(s => s.classList.remove('active'));
+      sidebarLinks.forEach(l => l.classList.remove('active'));
+
+      const target = document.getElementById(id);
+      if (target) {
+        target.classList.add('active');
+      } else {
+        sections[0].classList.add('active');
+        id = sections[0].id;
+      }
+
+      // Activate sidebar link
+      const link = document.querySelector(`.sidebar-link[data-section="${id}"]`);
+      if (link) link.classList.add('active');
+
+      // Close mobile sidebar
+      if (sidebar) sidebar.classList.remove('open');
+    }
+
+    function handleHash() {
+      const hash = location.hash.slice(1) || 'getting-started';
+      showSection(hash);
+    }
+
+    // Handle sidebar link clicks with scroll targets
+    document.querySelectorAll('.sidebar-link').forEach(link => {
+      link.addEventListener('click', (e) => {
+        const section = link.getAttribute('data-section') || link.getAttribute('href')?.slice(1);
+        const scrollTo = link.getAttribute('data-scroll');
+
+        if (section) {
+          e.preventDefault();
+          history.pushState(null, '', '#' + section);
+          showSection(section);
+
+          if (scrollTo) {
+            // Small delay to let section become visible
+            requestAnimationFrame(() => {
+              const el = document.getElementById(scrollTo);
+              if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            });
+          } else {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }
+        }
+      });
+    });
+
+    window.addEventListener('hashchange', handleHash);
+    handleHash();
+  </script>
+
+</body>
+</html>

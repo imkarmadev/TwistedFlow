@@ -1,54 +1,90 @@
 # TwistedFlow
 
-A visual API workflow builder. Visual node-based flow programming. Build, chain, and debug HTTP request flows by wiring nodes on a canvas — no code required for most workflows, with a Function node escape hatch when you need custom logic.
+A visual flow engine. Build automations, API clients, HTTP servers, test suites, and system tools by wiring nodes on a canvas — then run them headlessly or compile to standalone binaries.
 
-**macOS desktop app** built with Tauri 2 + React 19 + React Flow + Rust + SQLite.
+**Desktop app** (Tauri 2 + React 19 + Rust) + **CLI** (`twistedflow-cli run` / `twistedflow-cli build`).
 
 ---
 
 ## Features
 
-### Node Types
+### 23 Built-in Nodes
 
 | Node | Category | Description |
 |------|----------|-------------|
-| **Start** | Flow Control | Entry point. Environment selector + Run/Stop buttons. |
-| **HTTP Request** | HTTP | Fires HTTP calls. URL templates (`#{token}`), Zod response schema, status code output pin. |
-| **Match** | Flow Control | Switch/case routing. Compares a value against cases, fires the matching branch. |
+| **Start** | Flow Control | Entry point. Triggers execution. |
+| **If/Else** | Flow Control | Boolean branching — true/false exec paths. |
+| **Match** | Flow Control | Switch/case routing on any value. |
 | **ForEach (Sequential)** | Flow Control | Iterates an array, runs body chain once per item in order. |
-| **ForEach (Parallel)** | Flow Control | Iterates an array, runs body chain for all items concurrently. |
-| **Emit Event** | Events | Broadcasts a named event with typed payload. Listeners fire in parallel. |
-| **On Event** | Events | Listens for a named event. Output pins auto-mirror the emitter's payload. |
-| **Env Var** | Variables | Reads a value from the active environment. Explicit wiring, no hidden template magic. |
-| **Break Object** | Data | Splits an object into one output pin per field. Introspects source schema at design time. |
-| **Make Object** | Data | Assembles an object from named typed input pins. Inverse of Break Object. |
-| **Convert** | Data | Type coercion (string/number/integer/boolean/JSON). Smart — detects source type, filters valid targets. |
-| **Function** | Data | User-authored TypeScript transform. Typed inputs/outputs, sandboxed execution. |
-| **Tap** | Data | Pass-through debug probe. Shows every value that flows through it. Accumulates across parallel iterations. |
-| **Log** | Data | Exec-chain print sink. Writes values to the bottom Console panel with timestamps. |
+| **ForEach (Parallel)** | Flow Control | Iterates an array, runs all items concurrently. |
+| **Try/Catch** | Flow Control | Error boundary — catches failures and routes to error path. |
+| **EmitEvent** | Flow Control | Broadcasts a named event. Listeners fire in parallel. |
+| **OnEvent** | Flow Control | Listens for a named event. |
+| **Request** | HTTP | Fires HTTP calls. URL templates (`#{token}`), Zod response schema, status code output pin. |
+| **Listen** | HTTP | Starts an HTTP server (process node — stays alive). |
+| **Route Match** | HTTP | Matches incoming requests by method + path pattern. |
+| **Send Response** | HTTP | Sends HTTP response back to client. |
+| **BreakObject** | Data | Splits an object into one output pin per field. |
+| **MakeObject** | Data | Assembles an object from named typed input pins. |
+| **Convert** | Data | Type coercion (string/number/integer/boolean/JSON). |
+| **Tap** | Data | Pass-through debug probe. Shows every value that flows through. |
+| **Log** | Data | Exec-chain print sink. Writes to the console panel. |
+| **EnvVar** | Variables | Reads a value from the active .env file. |
+| **SetVariable** | Variables | Sets a runtime variable. |
+| **GetVariable** | Variables | Reads a runtime variable. |
+| **Print** | System | Writes to stdout (useful in CLI/binary mode). |
+| **ShellExec** | System | Runs a shell command and captures output. |
+| **FileRead** | System | Reads a file from disk. |
+| **FileWrite** | System | Writes a file to disk. |
+| **Sleep** | System | Pauses execution for a duration. |
+| **Exit** | System | Exits the flow with a status code. |
+| **Assert** | Testing | Asserts a condition is true (fails the flow if not). |
+| **AssertType** | Testing | Asserts a value matches an expected type. |
 
-### Two Edge Types (Visual)
+### Two Edge Types
 
 - **Exec edges** (white diamonds) — control flow. Determines run order.
 - **Data edges** (colored circles) — typed values. Pin colors: string (pink), number (green), boolean (red), object (blue), array (purple).
 
-### Environments + Auth
+### CLI + Compile to Binary
 
-Each project has named environments (dev, staging, prod) with:
+```bash
+# Run a flow headlessly
+twistedflow-cli run ./flows/main.flow.json -e API_KEY=abc123
 
-- **Base URL** — prepended to relative request URLs
-- **Headers** — env-specific headers (override project defaults)
-- **Variables** — accessed via explicit EnvVar nodes on the canvas
-- **Authentication** — Bearer, Basic, API Key (header or query), OAuth2 Client Credentials
+# Compile a project to a standalone binary
+twistedflow-cli build ~/my-project -o my-app --flow main --env prod
+./my-app   # just runs, no args needed
+```
 
-Auth is injected after all header merges — can't be accidentally overridden.
+The desktop app also has a **Build** button in the canvas toolbar that compiles via native save dialog.
+
+### WASM Plugins
+
+Custom nodes as WebAssembly modules. Write in Rust (or anything that compiles to WASM), drop in your project's `nodes/` folder or `~/.twistedflow/plugins/`.
+
+A guest SDK (`twistedflow-plugin` crate) makes writing plugins straightforward.
+
+### Folder-based Projects
+
+No database. A project is just files on disk — git-friendly by default.
+
+```
+my-project/
+├── twistedflow.toml     # project name
+├── .env                 # default environment
+├── .env.dev             # dev environment
+├── .env.prod            # prod environment
+├── flows/
+│   └── main.flow.json
+└── nodes/               # project WASM plugins
+```
 
 ### Smart Canvas
 
 - **Right-click** or **Space** to open the searchable node palette
 - **Drag a pin to empty canvas** — palette opens filtered to compatible nodes, auto-wires on selection
 - **Type-aware filtering** — dragging a number pin won't suggest Break Object (which needs an object)
-- **Pin hit detection** — connection drops near a node don't hijack to the palette
 - **Viewport persistence** — zoom/pan position saved per flow
 - **Minimap** — toggle with **M** key
 
@@ -57,15 +93,8 @@ Auth is injected after all header merges — can't be accidentally overridden.
 - **Tap nodes** show every value that passed through (inline on the canvas)
 - **Log nodes** print to the **Console panel** (toggle with **`** backtick key)
 - **Per-node status** — pending (grey), running (pulsing cyan), ok (green), error (red)
-- **Last Response viewer** in the inspector — shows the actual HTTP request sent (resolved URL + all headers including auth) and the response body
-- **Schema validation errors** show full Zod error + a "Use response as schema" one-click fix
+- **Last Response viewer** in the inspector
 - **Stop button** — halts execution at the next node boundary
-
-### Schema Authoring
-
-- **Hand-write** Zod schemas in the inspector
-- **From JSON** — paste a sample response, auto-generate the Zod schema
-- **Auto-fix** — when validation fails, click "Use response as schema" to regenerate from the actual response
 
 ---
 
@@ -74,46 +103,39 @@ Auth is injected after all header merges — can't be accidentally overridden.
 | Layer | Technology |
 |-------|-----------|
 | Desktop shell | [Tauri 2](https://v2.tauri.app/) |
-| Backend | Rust + [rusqlite](https://github.com/rusqlite/rusqlite) + [reqwest](https://github.com/seanmonstar/reqwest) |
+| Execution | Rust (async, pure — no Tauri dependency) |
+| HTTP | [reqwest](https://github.com/seanmonstar/reqwest) |
+| WASM runtime | [wasmtime](https://wasmtime.dev/) 29 |
 | Frontend | React 19 + [Vite 6](https://vitejs.dev/) |
-| Canvas | [@xyflow/react](https://reactflow.dev/) v12 (React Flow) |
-| Schema | [Zod 3](https://zod.dev/) |
+| Canvas | [@xyflow/react](https://reactflow.dev/) v12 |
 | Monorepo | [Turbo](https://turbo.build/) + [Bun](https://bun.sh/) |
-| Testing | bun:test (64 tests) |
 
 ### Monorepo Structure
 
 ```
-twistedflow/
-├── apps/desktop/                # Tauri desktop app
-│   ├── src-tauri/               # Rust backend (SQLite, HTTP, OAuth2)
-│   │   ├── src/main.rs          # Entry
-│   │   ├── src/lib.rs           # Tauri setup
-│   │   ├── src/db.rs            # SQLite repos (Project, Flow, Environment)
-│   │   ├── src/commands.rs      # Tauri commands (CRUD + save/load)
-│   │   └── src/http.rs          # reqwest transport + OAuth2 CC
-│   ├── src/mainview/            # React app
-│   │   ├── App.tsx              # Root layout + state
-│   │   ├── use-tauri.ts         # Tauri invoke bridge
-│   │   ├── components/canvas/   # React Flow canvas + node renderers
-│   │   ├── components/inspector/# Right-side property editor
-│   │   ├── components/console/  # Bottom log panel
-│   │   ├── components/settings/ # Project settings modal
-│   │   ├── components/layout/   # Sidebar + title bar
-│   │   └── lib/                 # Shared logic (pins, schema, context)
-│   └── package.json
+TwistedFlow/
+├── apps/
+│   ├── desktop/                    # Tauri desktop app
+│   │   ├── src-tauri/              # Rust workspace
+│   │   │   ├── src/                # Tauri app (project.rs, executor_commands.rs, http.rs)
+│   │   │   └── crates/
+│   │   │       ├── twistedflow-engine/   # Pure async executor, graph, templates, WASM host
+│   │   │       ├── twistedflow-nodes/    # 23 built-in node implementations (#[node] macro)
+│   │   │       ├── twistedflow-macros/   # #[node] proc macro + inventory auto-registration
+│   │   │       ├── twistedflow-cli/      # CLI binary (run + build)
+│   │   │       └── twistedflow-plugin/   # Guest SDK for WASM plugin authors
+│   │   └── src/mainview/           # React frontend
+│   │       ├── components/canvas/  # Node renderers + flow canvas
+│   │       ├── components/inspector/ # Property editor
+│   │       ├── components/console/ # Log panel
+│   │       ├── components/settings/ # Project settings
+│   │       └── lib/                # Pin system, schema resolution, node registry
+│   └── web/                        # Landing page
 ├── packages/
-│   ├── core/                    # Executor, template engine, schema tools
-│   │   ├── src/executor.ts      # Recursive chain walker + all node handlers
-│   │   ├── src/template.ts      # #{token} parser + renderer
-│   │   ├── src/schema/walk.ts   # Zod schema → pin descriptors
-│   │   ├── src/schema/from-json.ts  # JSON → Zod source inference
-│   │   └── src/*.test.ts        # 64 unit tests
-│   └── shared/                  # Zod domain models
-│       └── src/models/          # Project, Flow, Node, Edge, Environment
-├── package.json                 # Root workspace config
-├── turbo.json
-└── tsconfig.json
+│   ├── core/                       # JS utilities (pin helpers, template parser, schema tools)
+│   └── shared/                     # Shared TypeScript types
+├── examples/                       # Importable .flow.json files
+└── scripts/                        # Release tooling
 ```
 
 ---
@@ -122,39 +144,29 @@ twistedflow/
 
 ### Prerequisites
 
-- **macOS** (Tauri window chrome + native traffic lights)
+- **macOS** or **Linux** (Windows not yet supported)
 - [Bun](https://bun.sh/) >= 1.2
 - [Rust](https://rustup.rs/) >= 1.77
-- Xcode Command Line Tools (`xcode-select --install`)
+- Xcode Command Line Tools on macOS (`xcode-select --install`)
 
 ### Install + Run
 
 ```bash
-# Clone
 git clone https://github.com/imkarmadev/TwistedFlow.git
-cd twistedflow
-
-# Install JS dependencies
+cd TwistedFlow
 bun install
 
-# Run in dev mode (Vite HMR + Cargo watch)
 cd apps/desktop
 bun run dev
 ```
 
-First Rust compile takes ~30s (downloads + builds crates). Subsequent rebuilds are <5s.
+First Rust compile takes ~30s. Subsequent rebuilds are <5s.
 
 ### Run Tests
 
 ```bash
-# From root — runs all packages via Turbo
-bun run test
-
-# Just the core package
-cd packages/core && bun test
-
-# Watch mode
-cd packages/core && bun test --watch
+bun run test              # all packages via Turbo
+cd packages/core && bun test   # just core JS tests
 ```
 
 ### Build for Release
@@ -177,53 +189,7 @@ Produces a `.app` bundle in `src-tauri/target/release/bundle/`.
 | **`** (backtick) | Toggle console panel |
 | **M** | Toggle minimap |
 | **Backspace / Delete** | Delete selected node or edge |
-| **Cmd+Z / Cmd+Shift+Z** | Undo / Redo (React Flow built-in) |
-
----
-
-## Data Storage
-
-- **SQLite database** at `~/Library/Application Support/dev.twistedflow.desktop/twistedflow.db`
-- Schema uses UUIDs + `updated_at` + soft-delete columns — designed for future cloud sync
-- Flows store nodes, edges, and viewport as JSON columns
-
----
-
-## Architecture Highlights
-
-### Executor (packages/core/executor.ts)
-
-The heart of the app. A recursive chain walker that:
-
-1. Starts at the Start node
-2. Follows exec edges to determine run order
-3. For each HTTP node: resolves `#{token}` templates from upstream data edges, applies auth + header layering, fires fetch via Rust, validates response against Zod schema
-4. ForEach nodes recurse into the body sub-chain (sequential or parallel via `Promise.all`)
-5. Match nodes route to the matching case branch and return (no continuation)
-6. Emit Event nodes find all On Event listeners by name and spawn their branches concurrently
-7. Pure-data nodes (Convert, Break Object, Make Object, Function, Tap) resolve lazily when downstream nodes query through them
-8. Log nodes call the `onLog` callback to push entries to the console panel
-
-All of this is tested with 64 unit tests using a mock fetch transport.
-
-### Pin System
-
-Every node declares its pins via a `compute*Pins()` function. Pins have:
-- `id` — handle identifier (e.g. `in:userId`, `out:name`, `exec-in`)
-- `kind` — `exec` or `data`
-- `direction` — `in` or `out`
-- `dataType` — `string | number | boolean | object | array | unknown`
-
-The schema-resolution system (`lib/schema-resolution.ts`) walks backward through the graph to introspect what type a given pin carries — used by Break Object (to auto-generate sub-pins), Convert (to filter valid targets), and the palette (to filter compatible nodes on pin-drop).
-
-### Three-Layer Header Merge
-
-Every HTTP request's headers are built by merging three layers (last wins per key):
-1. **Project default headers** — general, same across environments
-2. **Environment headers** — env-specific overrides
-3. **Node headers** — per-request overrides
-
-Auth is applied AFTER all three layers — can't be accidentally overridden.
+| **Cmd+Z / Cmd+Shift+Z** | Undo / Redo |
 
 ---
 
