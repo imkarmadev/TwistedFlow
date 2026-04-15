@@ -120,8 +120,9 @@ impl Node for HttpRequestNode {
             };
 
             // Step 9: project to output pins
+            // Response body fields go in first so they can't overwrite the
+            // fixed pins (status, responseTime, responseHeaders) that follow.
             let mut out: HashMap<String, Value> = HashMap::new();
-            out.insert("status".into(), json!(response.status));
 
             match &parsed {
                 Value::Object(map) => {
@@ -134,12 +135,13 @@ impl Node for HttpRequestNode {
                 }
             }
 
-            // Response headers as a direct output pin
+            // Fixed output pins — inserted AFTER body fields so they always win
+            out.insert("status".into(), json!(response.status));
+
             let resp_headers: HashMap<String, String> =
                 response.headers.iter().cloned().collect();
             out.insert("responseHeaders".into(), json!(resp_headers));
 
-            // Response time in milliseconds
             out.insert("responseTime".into(), json!(response_time_ms));
 
             let header_map_for_req: HashMap<String, String> =
