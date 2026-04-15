@@ -1189,6 +1189,16 @@ const KNOWN_TYPES = new Set([
   "reduce",
   // Flow control
   "retry",
+  // HTTP Server (new)
+  "route",
+  "parseBody",
+  "setHeaders",
+  "cors",
+  "verifyAuth",
+  "rateLimit",
+  "cookie",
+  "redirect",
+  "serveStatic",
 ]);
 
 function kindToType(kind: string): string {
