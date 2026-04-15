@@ -137,19 +137,20 @@ impl Node for ServeStaticNode {
                 headers.insert("Content-Type".to_string(), mime.clone());
                 headers.insert("Content-Length".to_string(), content_len.to_string());
 
-                // For text types, send as string; for binary, send base64
-                // (the HTTP Listen raw socket handler will handle it)
-                let body = if mime.starts_with("text/")
+                // For text types, decode as UTF-8. For binary, preserve
+                // bytes via Latin-1 mapping (each byte → one char) so
+                // write_all(as_bytes()) on the socket reproduces them exactly.
+                let is_text = mime.starts_with("text/")
                     || mime.contains("json")
                     || mime.contains("javascript")
                     || mime.contains("xml")
                     || mime.contains("svg")
-                    || mime.contains("css")
-                {
+                    || mime.contains("css");
+
+                let body = if is_text {
                     String::from_utf8_lossy(&content).into_owned()
                 } else {
-                    // Send raw bytes as lossy string — HTTP Listen writes raw bytes
-                    String::from_utf8_lossy(&content).into_owned()
+                    content.iter().map(|&b| b as char).collect::<String>()
                 };
 
                 let sent = http_listen::send_response(

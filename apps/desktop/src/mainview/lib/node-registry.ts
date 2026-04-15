@@ -50,7 +50,9 @@ export type NodeCategory =
   | "Data"
   | "Events"
   | "CLI"
-  | "String";
+  | "String"
+  | "System"
+  | "Testing";
 
 export interface NodeTypeDef {
   /** Internal type id, persisted to SQLite as `kind`. */
@@ -378,7 +380,7 @@ export const NODE_REGISTRY: NodeTypeDef[] = [
   {
     type: "assert",
     label: "Assert",
-    category: "Testing" as NodeCategory,
+    category: "Testing",
     description: "Assert that actual equals expected. Fails the flow if not.",
     component: SystemNode,
     hasExecIn: true,
@@ -393,7 +395,7 @@ export const NODE_REGISTRY: NodeTypeDef[] = [
   {
     type: "assertType",
     label: "Assert Type",
-    category: "Testing" as NodeCategory,
+    category: "Testing",
     description: "Assert that a value has the expected type (string, number, boolean, object, array, null).",
     component: SystemNode,
     hasExecIn: true,
@@ -611,7 +613,7 @@ export const NODE_REGISTRY: NodeTypeDef[] = [
   {
     type: "print",
     label: "Print",
-    category: "System" as NodeCategory,
+    category: "System",
     description: "Print a value to stdout. In the desktop app, also shows in the console panel.",
     component: SystemNode,
     hasExecIn: true,
@@ -626,7 +628,7 @@ export const NODE_REGISTRY: NodeTypeDef[] = [
   {
     type: "shellExec",
     label: "Shell Exec",
-    category: "System" as NodeCategory,
+    category: "System",
     description: "Run a shell command. Captures stdout, stderr, exit code.",
     component: SystemNode,
     hasExecIn: true,
@@ -641,7 +643,7 @@ export const NODE_REGISTRY: NodeTypeDef[] = [
   {
     type: "fileRead",
     label: "File Read",
-    category: "System" as NodeCategory,
+    category: "System",
     description: "Read a file from disk. Parses JSON automatically.",
     component: SystemNode,
     hasExecIn: true,
@@ -654,7 +656,7 @@ export const NODE_REGISTRY: NodeTypeDef[] = [
   {
     type: "fileWrite",
     label: "File Write",
-    category: "System" as NodeCategory,
+    category: "System",
     description: "Write content to a file. Creates parent directories.",
     component: SystemNode,
     hasExecIn: true,
@@ -669,7 +671,7 @@ export const NODE_REGISTRY: NodeTypeDef[] = [
   {
     type: "sleep",
     label: "Sleep",
-    category: "System" as NodeCategory,
+    category: "System",
     description: "Pause execution for a duration in milliseconds.",
     component: SystemNode,
     hasExecIn: true,
@@ -684,7 +686,7 @@ export const NODE_REGISTRY: NodeTypeDef[] = [
   {
     type: "exit",
     label: "Exit",
-    category: "System" as NodeCategory,
+    category: "System",
     description: "Terminate the flow. Non-zero code = error (CLI exits with that code).",
     component: SystemNode,
     hasExecIn: true,

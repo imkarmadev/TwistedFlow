@@ -190,7 +190,14 @@ impl Node for HttpListenNode {
                     // Send HTTP response
                     let mut resp_hdrs = String::new();
                     for (k, v) in &resp.headers {
-                        resp_hdrs.push_str(&format!("{}: {}\r\n", k, v));
+                        // Support multi-value headers (e.g. Set-Cookie) split by \n
+                        if v.contains('\n') {
+                            for part in v.split('\n') {
+                                resp_hdrs.push_str(&format!("{}: {}\r\n", k, part));
+                            }
+                        } else {
+                            resp_hdrs.push_str(&format!("{}: {}\r\n", k, v));
+                        }
                     }
                     if !resp.headers.contains_key("content-type") {
                         resp_hdrs.push_str("Content-Type: application/json\r\n");

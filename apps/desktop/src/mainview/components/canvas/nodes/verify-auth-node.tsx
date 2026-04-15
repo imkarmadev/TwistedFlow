@@ -81,6 +81,15 @@ export function VerifyAuthNode({ id, data, selected }: NodeProps) {
           <Handle id="out:token" type="source" position={Position.Right} className={`${s.pin} ${pinClass(s, "string")}`} />
         </div>
       </div>
+
+      {/* out:error */}
+      <div className={s.pinRow}>
+        <span className={s.pinSpacer} />
+        <div className={s.pinLabelRight}>
+          <span className={s.pinName}>error</span>
+          <Handle id="out:error" type="source" position={Position.Right} className={`${s.pin} ${pinClass(s, "string")}`} />
+        </div>
+      </div>
     </div>
   );
 }

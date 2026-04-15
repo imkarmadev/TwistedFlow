@@ -128,10 +128,9 @@ async fn execute_set(ctx: &NodeCtx<'_>) -> NodeResult {
         cookie_strings.push(parts.join("; "));
     }
 
-    // Build a headers object with Set-Cookie value
-    // Note: multiple Set-Cookie headers are joined with newline for the
-    // Send Response node to split if needed. In practice most flows set one cookie.
-    let header_value = cookie_strings.join(", ");
+    // Each Set-Cookie must be its own HTTP header line (RFC 6265).
+    // We join with "\n" and the HTTP Listen header writer splits them back.
+    let header_value = cookie_strings.join("\n");
     let result = json!({ "Set-Cookie": header_value });
 
     {

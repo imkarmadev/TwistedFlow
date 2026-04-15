@@ -480,6 +480,7 @@ export function computeVerifyAuthPins(): ComputedPins {
       { id: "exec-fail", side: "right", label: "fail", kind: "exec" },
       { id: "out:claims", side: "right", label: "claims", kind: "data", dataType: "object" },
       { id: "out:token", side: "right", label: "token", kind: "data", dataType: "string" },
+      { id: "out:error", side: "right", label: "error", kind: "data", dataType: "string" },
     ],
   };
 }
