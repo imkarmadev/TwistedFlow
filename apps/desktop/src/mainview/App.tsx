@@ -22,6 +22,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Node } from "@xyflow/react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { TitleBar } from "./components/layout/title-bar";
 import { Sidebar } from "./components/layout/sidebar";
 import { FlowCanvas } from "./components/canvas/flow-canvas";
@@ -75,6 +76,32 @@ export default function App() {
     void checkForUpdate().then((info) => {
       if (info) setUpdateInfo(info);
     });
+  }, []);
+
+  // ── Running flows (survives flow switching) ───────────────────────
+  const [runningFlows, setRunningFlows] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    let unStarted: UnlistenFn | null = null;
+    let unFinished: UnlistenFn | null = null;
+
+    void (async () => {
+      unStarted = await listen<{ flowId: string }>("flow:started", (e) => {
+        setRunningFlows((prev) => new Set(prev).add(e.payload.flowId));
+      });
+      unFinished = await listen<{ flowId: string }>("flow:finished", (e) => {
+        setRunningFlows((prev) => {
+          const next = new Set(prev);
+          next.delete(e.payload.flowId);
+          return next;
+        });
+      });
+    })();
+
+    return () => {
+      unStarted?.();
+      unFinished?.();
+    };
   }, []);
 
   // ── Last-run results / errors / raw responses ─────────────────────
@@ -302,6 +329,7 @@ export default function App() {
             activeProjectPath={activeProjectPath}
             activeProjectName={projectName}
             activeFlowFilename={activeFlowFilename}
+            runningFlows={runningFlows}
             onOpenProject={handleOpenProject}
             onCreateProject={(parentPath, name) => {
               void invoke("create_project", { parentPath, name }).then(() => {
@@ -317,6 +345,7 @@ export default function App() {
               <FlowCanvas
                 projectPath={activeProjectPath}
                 flowFilename={activeFlowFilename}
+                running={runningFlows.has(activeFlowFilename!)}
                 selectedNode={selectedNode}
                 onSelectionChange={setSelectedNode}
                 registerUpdateNodeData={registerUpdateNodeData}

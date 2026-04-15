@@ -13,6 +13,8 @@ interface SidebarProps {
   activeProjectPath: string | null;
   activeProjectName: string | null;
   activeFlowFilename: string | null;
+  /** Set of flow filenames that are currently running. */
+  runningFlows: Set<string>;
   onOpenProject: (path: string) => void;
   onCreateProject: (parentPath: string, name: string) => void;
   onSelectFlow: (filename: string) => void;
@@ -54,6 +56,7 @@ export function Sidebar({
   activeProjectPath,
   activeProjectName,
   activeFlowFilename,
+  runningFlows,
   onOpenProject,
   onCreateProject,
   onSelectFlow,
@@ -258,6 +261,7 @@ export function Sidebar({
                   className={clsx(s.flowItem, f.filename === activeFlowFilename && s.flowItemActive)}
                   onClick={() => onSelectFlow(f.filename)}
                 >
+                  {runningFlows.has(f.filename) && <span className={s.runningDot} />}
                   {f.name}
                 </button>
                 <div className={s.flowIcons}>

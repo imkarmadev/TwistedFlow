@@ -98,8 +98,23 @@ const NODE_CONFIGS: Record<string, (data: Record<string, unknown>) => SystemNode
     inputs: [
       { id: "in:status", label: "status", type: "number" },
       { id: "in:body", label: "body", type: "unknown" },
+      { id: "in:headers", label: "headers", type: "object" },
     ],
     outputs: [],
+  }),
+  parseBody: (data) => ({
+    badge: "HTTP",
+    label: "Parse Body",
+    subtitle: (data.expect as string) || "auto",
+    inputs: [
+      { id: "in:body", label: "body", type: "unknown" },
+      { id: "in:headers", label: "headers", type: "object" },
+    ],
+    outputs: [
+      { id: "out:parsed", label: "parsed", type: "unknown" },
+      { id: "out:contentType", label: "contentType", type: "string" },
+    ],
+    noExec: true,
   }),
   assert: (data) => ({
     badge: "TEST",
@@ -119,6 +134,49 @@ const NODE_CONFIGS: Record<string, (data: Record<string, unknown>) => SystemNode
       { id: "in:value", label: "value", type: "unknown" },
     ],
     outputs: [],
+  }),
+  setHeaders: (data) => {
+    const hdrs = (data.headers as Array<{ key: string; value: string; enabled?: boolean }>) ?? [];
+    const enabledCount = hdrs.filter((h) => h.enabled !== false && h.key).length;
+    return {
+      badge: "HTTP",
+      label: "Set Headers",
+      subtitle: `${enabledCount} header${enabledCount === 1 ? "" : "s"}`,
+      inputs: [{ id: "in:merge", label: "merge", type: "object" }],
+      outputs: [{ id: "out:headers", label: "headers", type: "object" }],
+      noExec: true,
+    };
+  },
+  cookie: (data) => {
+    const mode = (data.mode as string) || "parse";
+    return {
+      badge: "HTTP",
+      label: "Cookie",
+      subtitle: mode,
+      inputs: [{ id: "in:headers", label: "headers", type: "object" as DataType }],
+      outputs: mode === "set"
+        ? [{ id: "out:setCookieHeaders", label: "setCookieHeaders", type: "object" as DataType }]
+        : [{ id: "out:cookies", label: "cookies", type: "object" as DataType }],
+      noExec: true,
+    };
+  },
+  redirect: (data) => ({
+    badge: "HTTP",
+    label: "Redirect",
+    subtitle: `${data.status ?? 302} → ${(data.url as string)?.slice(0, 20) || "/"}`,
+    inputs: [{ id: "in:url", label: "url", type: "string" }],
+    outputs: [],
+  }),
+  serveStatic: (data) => ({
+    badge: "HTTP",
+    label: "Serve Static",
+    subtitle: (data.rootDir as string)?.slice(0, 25) || "./public",
+    inputs: [{ id: "in:path", label: "path", type: "string" }],
+    outputs: [
+      { id: "out:filePath", label: "filePath", type: "string" },
+      { id: "out:contentType", label: "contentType", type: "string" },
+      { id: "out:found", label: "found", type: "boolean" },
+    ],
   }),
   routeMatch: (data) => ({
     badge: "HTTP",

@@ -2,6 +2,28 @@
 
 All notable changes to TwistedFlow are documented here.
 
+## [1.2.0] — 2026-04-14
+
+### Added — REST API Server Nodes (10 new nodes)
+- **Route** — Multi-route dispatcher with path parameter extraction (`/users/:id`) and query string parsing. Replaces cascading Route Match + If/Else chains with a single branch node.
+- **Parse Body** — Parse request body as JSON, form-urlencoded, or text. Auto-detects Content-Type from headers.
+- **Set Headers** — Build response headers from key-value pairs with `#{template}` support. Wire into Send Response's new `in:headers` pin.
+- **CORS** — Handle CORS preflight (OPTIONS → 204) and inject Access-Control-* headers. Branches preflight/request.
+- **Verify Auth** — Validate JWT (HS256 with expiry check), API key, Basic auth, or Bearer tokens. Outputs extracted claims. Branches pass/fail.
+- **Rate Limit** — In-memory sliding window rate limiter with per-key tracking (IP, header, or custom key). Outputs X-RateLimit-* headers.
+- **Cookie** — Parse incoming Cookie header into name-value object, or build Set-Cookie response headers with HttpOnly/Secure/SameSite attributes.
+- **Redirect** — Send HTTP redirect responses (301/302/307/308) with Location header.
+- **Serve Static** — Serve files from disk with automatic MIME type detection (25+ types), path traversal protection, and index file support.
+- **Route Match** deprecated in favor of Route node.
+
+### Enhanced
+- **Send Response** — Added `in:headers` input pin for dynamic header composition. CORS, Cookie, Set Headers, and Rate Limit nodes can now wire headers directly into responses.
+- **HTTP Request** — Added `out:responseTime` (ms) and `out:responseHeaders` (object) output pins for API testing and performance assertions.
+
+### Total: 46 built-in nodes (was 36)
+
+---
+
 ## [1.0.0] — 2026-04-11
 
 ### Highlights

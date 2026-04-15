@@ -533,10 +533,11 @@
 
       <div class="sidebar-group">
         <div class="sidebar-group-title">Nodes</div>
-        <a class="sidebar-link" href="#nodes" data-section="nodes">All 36 nodes</a>
+        <a class="sidebar-link" href="#nodes" data-section="nodes">All 46 nodes</a>
         <div class="sidebar-sub">
           <a class="sidebar-link" href="#nodes" data-scroll="nodes-flow">Flow Control</a>
-          <a class="sidebar-link" href="#nodes" data-scroll="nodes-http">HTTP</a>
+          <a class="sidebar-link" href="#nodes" data-scroll="nodes-http">HTTP Client</a>
+          <a class="sidebar-link" href="#nodes" data-scroll="nodes-http-server">HTTP Server</a>
           <a class="sidebar-link" href="#nodes" data-scroll="nodes-data">Data</a>
           <a class="sidebar-link" href="#nodes" data-scroll="nodes-vars">Variables</a>
           <a class="sidebar-link" href="#nodes" data-scroll="nodes-cli">CLI</a>
@@ -576,7 +577,7 @@
 
         <h2 id="gs-overview">What is TwistedFlow?</h2>
         <p>TwistedFlow is a visual flow engine. You build automations, API clients, HTTP servers, test suites, and system tools by wiring nodes on a canvas. Then you run them in the desktop app, headlessly via CLI, or compile to standalone binaries.</p>
-        <p>There are <strong>36 built-in nodes</strong> covering flow control, HTTP client/server, CLI tools, string processing, data manipulation, variables, system I/O, and testing. You can extend TwistedFlow with custom nodes via <strong>WASM plugins</strong>.</p>
+        <p>There are <strong>46 built-in nodes</strong> covering flow control, HTTP client/server, REST API server (routing, auth, CORS, rate limiting), CLI tools, string processing, data manipulation, variables, system I/O, and testing. You can extend TwistedFlow with custom nodes via <strong>WASM plugins</strong>.</p>
 
         <h2 id="gs-install">Installation</h2>
 
@@ -647,7 +648,7 @@ bun run dev</code></pre>
       <!-- ═══ NODES ═══ -->
       <section class="doc-section" id="nodes">
         <h1>Nodes Reference</h1>
-        <p class="subtitle">All 36 built-in nodes across 8 categories.</p>
+        <p class="subtitle">All 46 built-in nodes across 9 categories.</p>
 
         <p>Every node has <strong>pins</strong>: exec pins (white diamonds) control flow order, data pins (colored circles) carry typed values. Drag pin to pin to wire them. Drag a pin to empty canvas to create a compatible node automatically.</p>
 
@@ -758,55 +759,162 @@ bun run dev</code></pre>
           </div>
         </div>
 
-        <!-- HTTP -->
+        <!-- HTTP Client -->
         <div class="node-group" id="nodes-http">
-          <div class="node-group-title"><div class="node-group-dot" style="background: var(--accent);"></div> HTTP</div>
+          <div class="node-group-title"><div class="node-group-dot" style="background: var(--accent);"></div> HTTP Client</div>
 
           <div class="node-card">
             <div class="node-card-name">Request</div>
-            <div class="node-card-desc">Fires an HTTP request. Supports all methods (GET, POST, PUT, DELETE, PATCH, etc.). URL supports <code>#{token}</code> templates. Configure headers, body, and optional Zod response schema in the inspector.</div>
+            <div class="node-card-desc">Fires an HTTP request. Supports all methods, URL <code>#{token}</code> templates, three-layer header merge, 5 auth types (Bearer, Basic, API Key, OAuth2), Zod response schema, response time tracking, and response headers.</div>
             <div class="pin-list">
               <span class="pin-tag exec">&rarr; exec-in</span>
               <span class="pin-tag in">url (template)</span>
               <span class="pin-tag in">body (template)</span>
               <span class="pin-tag exec">exec-out &rarr;</span>
-              <span class="pin-tag out">body</span>
               <span class="pin-tag out">status</span>
-              <span class="pin-tag out">headers</span>
+              <span class="pin-tag out">responseTime</span>
+              <span class="pin-tag out">responseHeaders</span>
+              <span class="pin-tag out">body fields</span>
             </div>
           </div>
+        </div>
+
+        <!-- HTTP Server -->
+        <div class="node-group" id="nodes-http-server">
+          <div class="node-group-title"><div class="node-group-dot" style="background: #38bdf8;"></div> HTTP Server</div>
 
           <div class="node-card">
             <div class="node-card-name">Listen</div>
-            <div class="node-card-desc">Starts an HTTP server on a specified port. This is a <strong>process node</strong> &mdash; it stays alive until the flow is stopped. Incoming requests trigger the exec chain.</div>
+            <div class="node-card-desc">Starts an HTTP server on a specified port. This is a <strong>process node</strong> &mdash; it stays alive until the flow is stopped. Each incoming request triggers the <code>exec-request</code> chain.</div>
             <div class="pin-list">
               <span class="pin-tag exec">&rarr; exec-in</span>
-              <span class="pin-tag in">port</span>
-              <span class="pin-tag exec">on-request &rarr;</span>
-              <span class="pin-tag out">request</span>
+              <span class="pin-tag exec">request &rarr;</span>
+              <span class="pin-tag out">method</span>
+              <span class="pin-tag out">path</span>
+              <span class="pin-tag out">query</span>
+              <span class="pin-tag out">headers</span>
+              <span class="pin-tag out">body</span>
             </div>
           </div>
 
           <div class="node-card">
-            <div class="node-card-name">Route Match</div>
-            <div class="node-card-desc">Matches incoming HTTP requests by method and path pattern. Place after Listen to route requests to different handlers.</div>
+            <div class="node-card-name">Route</div>
+            <div class="node-card-desc">Multi-route dispatcher. Configure routes with method + path patterns. Supports <code>:param</code> extraction (<code>/users/:id</code>). Each route gets its own exec output. Falls back to <code>not found</code>.</div>
             <div class="pin-list">
               <span class="pin-tag exec">&rarr; exec-in</span>
-              <span class="pin-tag in">request</span>
-              <span class="pin-tag exec">matched &rarr;</span>
+              <span class="pin-tag in">method</span>
+              <span class="pin-tag in">path</span>
+              <span class="pin-tag in">query</span>
+              <span class="pin-tag exec">route-0 &rarr;</span>
+              <span class="pin-tag exec">route-1 &rarr;</span>
+              <span class="pin-tag exec">not found &rarr;</span>
               <span class="pin-tag out">params</span>
-              <span class="pin-tag out">body</span>
+              <span class="pin-tag out">query</span>
             </div>
           </div>
 
           <div class="node-card">
             <div class="node-card-name">Send Response</div>
-            <div class="node-card-desc">Sends an HTTP response back to the client. Set status code, headers, and body. Use at the end of a Listen chain.</div>
+            <div class="node-card-desc">Sends an HTTP response back to the client. Accepts dynamic headers from CORS, Cookie, or Set Headers nodes via <code>in:headers</code>.</div>
             <div class="pin-list">
               <span class="pin-tag exec">&rarr; exec-in</span>
               <span class="pin-tag in">status</span>
               <span class="pin-tag in">body</span>
               <span class="pin-tag in">headers</span>
+              <span class="pin-tag exec">exec-out &rarr;</span>
+            </div>
+          </div>
+
+          <div class="node-card">
+            <div class="node-card-name">Parse Body</div>
+            <div class="node-card-desc">Parse the request body. Auto-detects Content-Type (JSON, form-urlencoded, text) or force a mode. Pure data node &mdash; lazily resolved when downstream reads it.</div>
+            <div class="pin-list">
+              <span class="pin-tag in">body</span>
+              <span class="pin-tag in">headers</span>
+              <span class="pin-tag out">parsed</span>
+              <span class="pin-tag out">contentType</span>
+            </div>
+          </div>
+
+          <div class="node-card">
+            <div class="node-card-name">CORS</div>
+            <div class="node-card-desc">Handle cross-origin requests. OPTIONS preflight gets auto-responded (204). Normal requests continue with Access-Control headers injected. Configure allowed origins, methods, headers, credentials.</div>
+            <div class="pin-list">
+              <span class="pin-tag exec">&rarr; exec-in</span>
+              <span class="pin-tag in">method</span>
+              <span class="pin-tag in">headers</span>
+              <span class="pin-tag exec">preflight &rarr;</span>
+              <span class="pin-tag exec">request &rarr;</span>
+              <span class="pin-tag out">corsHeaders</span>
+            </div>
+          </div>
+
+          <div class="node-card">
+            <div class="node-card-name">Verify Auth</div>
+            <div class="node-card-desc">Validate incoming authentication. Modes: <strong>JWT</strong> (HS256 with expiry check), <strong>API Key</strong> (header validation), <strong>Basic</strong> (decode credentials), <strong>Bearer</strong> (extract token). Branches pass/fail.</div>
+            <div class="pin-list">
+              <span class="pin-tag exec">&rarr; exec-in</span>
+              <span class="pin-tag in">headers</span>
+              <span class="pin-tag in">secret</span>
+              <span class="pin-tag exec">pass &rarr;</span>
+              <span class="pin-tag exec">fail &rarr;</span>
+              <span class="pin-tag out">claims</span>
+              <span class="pin-tag out">token</span>
+            </div>
+          </div>
+
+          <div class="node-card">
+            <div class="node-card-name">Rate Limit</div>
+            <div class="node-card-desc">Sliding window rate limiter. Tracks requests per key (IP, header, or custom). Outputs <code>X-RateLimit-*</code> headers. Branches pass/limited.</div>
+            <div class="pin-list">
+              <span class="pin-tag exec">&rarr; exec-in</span>
+              <span class="pin-tag in">headers</span>
+              <span class="pin-tag in">key</span>
+              <span class="pin-tag exec">pass &rarr;</span>
+              <span class="pin-tag exec">limited &rarr;</span>
+              <span class="pin-tag out">remaining</span>
+              <span class="pin-tag out">rateLimitHeaders</span>
+            </div>
+          </div>
+
+          <div class="node-card">
+            <div class="node-card-name">Set Headers</div>
+            <div class="node-card-desc">Build response headers from configured key-value pairs. Supports <code>#{template}</code> tokens in values. Merge with upstream headers via <code>in:merge</code>.</div>
+            <div class="pin-list">
+              <span class="pin-tag in">merge</span>
+              <span class="pin-tag out">headers</span>
+            </div>
+          </div>
+
+          <div class="node-card">
+            <div class="node-card-name">Cookie</div>
+            <div class="node-card-desc">Two modes: <strong>Parse</strong> reads the Cookie header into a name-value object. <strong>Set</strong> builds Set-Cookie headers with path, HttpOnly, Secure, SameSite, Max-Age attributes.</div>
+            <div class="pin-list">
+              <span class="pin-tag in">headers</span>
+              <span class="pin-tag out">cookies / setCookieHeaders</span>
+            </div>
+          </div>
+
+          <div class="node-card">
+            <div class="node-card-name">Redirect</div>
+            <div class="node-card-desc">Send an HTTP redirect response. Configurable status code (301 permanent, 302 temporary, 307, 308) and target URL with template support.</div>
+            <div class="pin-list">
+              <span class="pin-tag exec">&rarr; exec-in</span>
+              <span class="pin-tag in">url</span>
+              <span class="pin-tag exec">exec-out &rarr;</span>
+            </div>
+          </div>
+
+          <div class="node-card">
+            <div class="node-card-name">Serve Static</div>
+            <div class="node-card-desc">Serve files from disk. Configurable root directory, index file, and path prefix stripping. Detects 25+ MIME types. Path traversal protection built in.</div>
+            <div class="pin-list">
+              <span class="pin-tag exec">&rarr; exec-in</span>
+              <span class="pin-tag in">path</span>
+              <span class="pin-tag exec">exec-out &rarr;</span>
+              <span class="pin-tag out">filePath</span>
+              <span class="pin-tag out">contentType</span>
+              <span class="pin-tag out">found</span>
             </div>
           </div>
         </div>

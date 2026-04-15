@@ -77,7 +77,7 @@ export function computeHttpRequestPins(data: HttpRequestData): ComputedPins {
     }));
   }
 
-  // `status` is always present — the HTTP response code (200, 404, etc.)
+  // Fixed output pins — always present
   const statusPin: ComputedPin = {
     id: "out:status",
     side: "right",
@@ -86,9 +86,25 @@ export function computeHttpRequestPins(data: HttpRequestData): ComputedPins {
     dataType: "number",
   };
 
+  const responseTimePin: ComputedPin = {
+    id: "out:responseTime",
+    side: "right",
+    label: "responseTime",
+    kind: "data",
+    dataType: "number",
+  };
+
+  const responseHeadersPin: ComputedPin = {
+    id: "out:responseHeaders",
+    side: "right",
+    label: "responseHeaders",
+    kind: "data",
+    dataType: "object",
+  };
+
   return {
     inputs: [EXEC_IN, ...inputDataPins],
-    outputs: [EXEC_OUT, statusPin, ...outputDataPins],
+    outputs: [EXEC_OUT, statusPin, responseTimePin, responseHeadersPin, ...outputDataPins],
   };
 }
 
@@ -366,6 +382,178 @@ export function computeForEachPins(): ComputedPins {
       { id: "exec-out", side: "right", label: "completed", kind: "exec" },
       { id: "out:item", side: "right", label: "item", kind: "data", dataType: "object" },
       { id: "out:index", side: "right", label: "index", kind: "data", dataType: "number" },
+    ],
+  };
+}
+
+// ── HTTP Server node pins ─────────────────────────────────────────────
+
+/**
+ * Route node — multi-route dispatcher. exec-in + 3 data inputs on left;
+ * one exec output per route + notFound + data outputs on right.
+ */
+export function computeRoutePins(
+  routes: Array<{ method: string; path: string; label?: string }> = [],
+): ComputedPins {
+  return {
+    inputs: [
+      EXEC_IN,
+      { id: "in:method", side: "left", label: "method", kind: "data", dataType: "string" },
+      { id: "in:path", side: "left", label: "path", kind: "data", dataType: "string" },
+      { id: "in:query", side: "left", label: "query", kind: "data", dataType: "string" },
+    ],
+    outputs: [
+      ...routes.map<ComputedPin>((r, i) => ({
+        id: `exec-route:${i}`,
+        side: "right",
+        label: r.label || `${r.method} ${r.path}`,
+        kind: "exec",
+      })),
+      { id: "exec-notFound", side: "right", label: "not found", kind: "exec" },
+      { id: "out:params", side: "right", label: "params", kind: "data", dataType: "object" },
+      { id: "out:query", side: "right", label: "query", kind: "data", dataType: "object" },
+    ],
+  };
+}
+
+/**
+ * Parse Body node — data node that parses request body.
+ */
+export function computeParseBodyPins(): ComputedPins {
+  return {
+    inputs: [
+      { id: "in:body", side: "left", label: "body", kind: "data", dataType: "unknown" },
+      { id: "in:headers", side: "left", label: "headers", kind: "data", dataType: "object" },
+    ],
+    outputs: [
+      { id: "out:parsed", side: "right", label: "parsed", kind: "data", dataType: "unknown" },
+      { id: "out:contentType", side: "right", label: "contentType", kind: "data", dataType: "string" },
+    ],
+  };
+}
+
+/**
+ * Set Headers node — data node that builds response headers.
+ */
+export function computeSetHeadersPins(): ComputedPins {
+  return {
+    inputs: [
+      { id: "in:merge", side: "left", label: "merge", kind: "data", dataType: "object" },
+    ],
+    outputs: [
+      { id: "out:headers", side: "right", label: "headers", kind: "data", dataType: "object" },
+    ],
+  };
+}
+
+/**
+ * CORS node — branch node for preflight handling.
+ */
+export function computeCorsPins(): ComputedPins {
+  return {
+    inputs: [
+      EXEC_IN,
+      { id: "in:method", side: "left", label: "method", kind: "data", dataType: "string" },
+      { id: "in:headers", side: "left", label: "headers", kind: "data", dataType: "object" },
+    ],
+    outputs: [
+      { id: "exec-preflight", side: "right", label: "preflight", kind: "exec" },
+      { id: "exec-request", side: "right", label: "request", kind: "exec" },
+      { id: "out:corsHeaders", side: "right", label: "corsHeaders", kind: "data", dataType: "object" },
+    ],
+  };
+}
+
+/**
+ * Verify Auth node — branch node for auth validation.
+ */
+export function computeVerifyAuthPins(): ComputedPins {
+  return {
+    inputs: [
+      EXEC_IN,
+      { id: "in:headers", side: "left", label: "headers", kind: "data", dataType: "object" },
+      { id: "in:secret", side: "left", label: "secret", kind: "data", dataType: "string" },
+      { id: "in:validKeys", side: "left", label: "validKeys", kind: "data", dataType: "array" },
+    ],
+    outputs: [
+      { id: "exec-pass", side: "right", label: "pass", kind: "exec" },
+      { id: "exec-fail", side: "right", label: "fail", kind: "exec" },
+      { id: "out:claims", side: "right", label: "claims", kind: "data", dataType: "object" },
+      { id: "out:token", side: "right", label: "token", kind: "data", dataType: "string" },
+    ],
+  };
+}
+
+/**
+ * Rate Limit node — branch node for rate limiting.
+ */
+export function computeRateLimitPins(): ComputedPins {
+  return {
+    inputs: [
+      EXEC_IN,
+      { id: "in:headers", side: "left", label: "headers", kind: "data", dataType: "object" },
+      { id: "in:key", side: "left", label: "key", kind: "data", dataType: "string" },
+    ],
+    outputs: [
+      { id: "exec-pass", side: "right", label: "pass", kind: "exec" },
+      { id: "exec-limited", side: "right", label: "limited", kind: "exec" },
+      { id: "out:remaining", side: "right", label: "remaining", kind: "data", dataType: "number" },
+      { id: "out:rateLimitHeaders", side: "right", label: "rateLimitHeaders", kind: "data", dataType: "object" },
+    ],
+  };
+}
+
+/**
+ * Cookie node — data node for parsing/setting cookies.
+ */
+export function computeCookiePins(mode?: string): ComputedPins {
+  if (mode === "set") {
+    return {
+      inputs: [
+        { id: "in:headers", side: "left", label: "headers", kind: "data", dataType: "object" },
+      ],
+      outputs: [
+        { id: "out:setCookieHeaders", side: "right", label: "setCookieHeaders", kind: "data", dataType: "object" },
+      ],
+    };
+  }
+  return {
+    inputs: [
+      { id: "in:headers", side: "left", label: "headers", kind: "data", dataType: "object" },
+    ],
+    outputs: [
+      { id: "out:cookies", side: "right", label: "cookies", kind: "data", dataType: "object" },
+    ],
+  };
+}
+
+/**
+ * Redirect node — exec node that sends a redirect response.
+ */
+export function computeRedirectPins(): ComputedPins {
+  return {
+    inputs: [
+      EXEC_IN,
+      { id: "in:url", side: "left", label: "url", kind: "data", dataType: "string" },
+    ],
+    outputs: [EXEC_OUT],
+  };
+}
+
+/**
+ * Serve Static node — exec node that serves files from disk.
+ */
+export function computeServeStaticPins(): ComputedPins {
+  return {
+    inputs: [
+      EXEC_IN,
+      { id: "in:path", side: "left", label: "path", kind: "data", dataType: "string" },
+    ],
+    outputs: [
+      EXEC_OUT,
+      { id: "out:filePath", side: "right", label: "filePath", kind: "data", dataType: "string" },
+      { id: "out:contentType", side: "right", label: "contentType", kind: "data", dataType: "string" },
+      { id: "out:found", side: "right", label: "found", kind: "data", dataType: "boolean" },
     ],
   };
 }

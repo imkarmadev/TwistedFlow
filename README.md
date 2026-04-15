@@ -8,7 +8,7 @@ A visual flow engine. Build automations, API clients, HTTP servers, test suites,
 
 ## Features
 
-### 23 Built-in Nodes
+### 46 Built-in Nodes
 
 | Node | Category | Description |
 |------|----------|-------------|
@@ -18,17 +18,32 @@ A visual flow engine. Build automations, API clients, HTTP servers, test suites,
 | **ForEach (Sequential)** | Flow Control | Iterates an array, runs body chain once per item in order. |
 | **ForEach (Parallel)** | Flow Control | Iterates an array, runs all items concurrently. |
 | **Try/Catch** | Flow Control | Error boundary — catches failures and routes to error path. |
+| **Retry** | Flow Control | Retry a sub-chain with exponential backoff. |
 | **EmitEvent** | Flow Control | Broadcasts a named event. Listeners fire in parallel. |
 | **OnEvent** | Flow Control | Listens for a named event. |
-| **Request** | HTTP | Fires HTTP calls. URL templates (`#{token}`), Zod response schema, status code output pin. |
-| **Listen** | HTTP | Starts an HTTP server (process node — stays alive). |
-| **Route Match** | HTTP | Matches incoming requests by method + path pattern. |
-| **Send Response** | HTTP | Sends HTTP response back to client. |
+| **Request** | HTTP | HTTP calls with URL templates, auth, Zod schema, response time tracking. |
+| **Listen** | HTTP Server | Starts an HTTP server (process node — stays alive). |
+| **Route** | HTTP Server | Multi-route dispatcher with path params (`/users/:id`) and query parsing. |
+| **Send Response** | HTTP Server | Sends HTTP response with dynamic headers. |
+| **Parse Body** | HTTP Server | Parse request body (JSON, form-urlencoded, text). Auto-detects Content-Type. |
+| **Set Headers** | HTTP Server | Build response headers with `#{template}` support. |
+| **CORS** | HTTP Server | Handle CORS preflight and inject Access-Control headers. |
+| **Verify Auth** | HTTP Server | Validate JWT (HS256), API key, Basic auth. Branches pass/fail. |
+| **Rate Limit** | HTTP Server | Sliding window rate limiter with per-key tracking. |
+| **Cookie** | HTTP Server | Parse incoming cookies or build Set-Cookie headers. |
+| **Redirect** | HTTP Server | Send HTTP redirect (301/302/307/308). |
+| **Serve Static** | HTTP Server | Serve files from disk with MIME detection. |
+| **Route Match** | HTTP Server | *(Deprecated)* Basic method + path matching. Use Route instead. |
 | **BreakObject** | Data | Splits an object into one output pin per field. |
 | **MakeObject** | Data | Assembles an object from named typed input pins. |
 | **Convert** | Data | Type coercion (string/number/integer/boolean/JSON). |
 | **Tap** | Data | Pass-through debug probe. Shows every value that flows through. |
 | **Log** | Data | Exec-chain print sink. Writes to the console panel. |
+| **Filter** | Data | Filter array items by expression (`item.status == 200`). |
+| **Map** | Data | Transform array items — pluck, pick, or template. |
+| **Merge** | Data | Deep-merge objects or concatenate arrays. |
+| **Reduce** | Data | Aggregate arrays: sum, count, join, min, max, groupBy. |
+| **Function** | Data | Custom TypeScript transform with typed I/O. |
 | **EnvVar** | Variables | Reads a value from the active .env file. |
 | **SetVariable** | Variables | Sets a runtime variable. |
 | **GetVariable** | Variables | Reads a runtime variable. |
@@ -38,6 +53,14 @@ A visual flow engine. Build automations, API clients, HTTP servers, test suites,
 | **FileWrite** | System | Writes a file to disk. |
 | **Sleep** | System | Pauses execution for a duration. |
 | **Exit** | System | Exits the flow with a status code. |
+| **Parse Args** | CLI | Parse CLI arguments into flags and positional args. |
+| **Stdin** | CLI | Read from standard input (piped or interactive). |
+| **Stderr** | CLI | Write to stderr. |
+| **Prompt** | CLI | Interactive user input (text, confirm, password). |
+| **Regex** | String | Match, extract, replace, or split with regular expressions. |
+| **Template** | String | String interpolation with `#{var}` tokens. |
+| **Encode/Decode** | String | Base64, URL, hex encoding/decoding. |
+| **Hash** | String | SHA-256, SHA-512, MD5, HMAC-SHA256. |
 | **Assert** | Testing | Asserts a condition is true (fails the flow if not). |
 | **AssertType** | Testing | Asserts a value matches an expected type. |
 
@@ -120,7 +143,7 @@ TwistedFlow/
 │   │   │   ├── src/                # Tauri app (project.rs, executor_commands.rs, http.rs)
 │   │   │   └── crates/
 │   │   │       ├── twistedflow-engine/   # Pure async executor, graph, templates, WASM host
-│   │   │       ├── twistedflow-nodes/    # 23 built-in node implementations (#[node] macro)
+│   │   │       ├── twistedflow-nodes/    # 46 built-in node implementations (#[node] macro)
 │   │   │       ├── twistedflow-macros/   # #[node] proc macro + inventory auto-registration
 │   │   │       ├── twistedflow-cli/      # CLI binary (run + build)
 │   │   │       └── twistedflow-plugin/   # Guest SDK for WASM plugin authors

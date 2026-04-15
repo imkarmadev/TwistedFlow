@@ -87,6 +87,8 @@ import s from "./flow-canvas.module.css";
 interface FlowCanvasProps {
   projectPath: string;
   flowFilename: string;
+  /** True when this flow is currently executing (managed by App). */
+  running: boolean;
   selectedNode: Node | null;
   onSelectionChange: (node: Node | null) => void;
   /** Bound from parent so the inspector can mutate node data via callback. */
@@ -153,6 +155,7 @@ export function FlowCanvas(props: FlowCanvasProps) {
 function FlowCanvasInner({
   projectPath,
   flowFilename,
+  running,
   onSelectionChange,
   registerUpdateNodeData,
   registerDeleteNode,
@@ -197,9 +200,6 @@ function FlowCanvasInner({
    * response" recovery action.
    */
   const [rawResponses, setRawResponses] = useState<Record<string, unknown>>({});
-  const [running, setRunning] = useState(false);
-  /** AbortController for the current run. Signalling it stops the executor
-   *  at the next node boundary. */
 
   // Always-fresh refs so the run handler closes over the latest graph
   const nodesRef = useRef(nodes);
@@ -210,6 +210,53 @@ function FlowCanvasInner({
   useEffect(() => {
     edgesRef.current = edges;
   }, [edges]);
+
+  // ── Always-on event listeners scoped by flowFilename ──
+  // These run regardless of whether *this* canvas started the run —
+  // reconnects automatically when switching back to a running flow.
+  useEffect(() => {
+    let unlistenStatus: UnlistenFn | null = null;
+    let unlistenLog: UnlistenFn | null = null;
+
+    void (async () => {
+      unlistenStatus = await listen<{
+        flowId: string;
+        nodeId: string;
+        status: NodeStatus;
+        output?: Record<string, unknown>;
+        error?: string;
+        rawResponse?: unknown;
+      }>("flow:status", (e) => {
+        if (e.payload.flowId !== flowFilename) return;
+        const { nodeId, status, output, error, rawResponse } = e.payload;
+        setStatuses((prev) => ({ ...prev, [nodeId]: status }));
+        if (output) {
+          setResults((prev) => ({ ...prev, [nodeId]: output }));
+        }
+        if (error) {
+          setErrors((prev) => ({ ...prev, [nodeId]: error }));
+        }
+        if (rawResponse !== undefined) {
+          setRawResponses((prev) => ({ ...prev, [nodeId]: rawResponse }));
+        }
+      });
+
+      unlistenLog = await listen<{
+        flowId: string;
+        nodeId: string;
+        label: string;
+        value: unknown;
+      }>("flow:log", (e) => {
+        if (e.payload.flowId !== flowFilename) return;
+        onLog(e.payload);
+      });
+    })();
+
+    return () => {
+      unlistenStatus?.();
+      unlistenLog?.();
+    };
+  }, [flowFilename, onLog]);
 
   // Push results + errors + rawResponses upward so the Inspector can render them.
   useEffect(() => {
@@ -510,7 +557,6 @@ function FlowCanvasInner({
     setResults({});
     setErrors({});
     setRawResponses({});
-    setRunning(true);
 
     // Resolve the active environment from the Start node's config
     const startNode = nodesRef.current.find((n) => n.type === "start");
@@ -525,58 +571,18 @@ function FlowCanvasInner({
       envVars,
     };
 
-    // Listen for status + log events from the Rust executor, then invoke
-    let unlistenStatus: UnlistenFn | null = null;
-    let unlistenLog: UnlistenFn | null = null;
-
-    void (async () => {
-      unlistenStatus = await listen<{
-        nodeId: string;
-        status: NodeStatus;
-        output?: Record<string, unknown>;
-        error?: string;
-        rawResponse?: unknown;
-      }>("flow:status", (e) => {
-        const { nodeId, status, output, error, rawResponse } = e.payload;
-        setStatuses((prev) => ({ ...prev, [nodeId]: status }));
-        if (output) {
-          setResults((prev) => ({ ...prev, [nodeId]: output }));
-        }
-        if (error) {
-          setErrors((prev) => ({ ...prev, [nodeId]: error }));
-        }
-        if (rawResponse !== undefined) {
-          setRawResponses((prev) => ({ ...prev, [nodeId]: rawResponse }));
-        }
-      });
-
-      unlistenLog = await listen<{
-        nodeId: string;
-        label: string;
-        value: unknown;
-      }>("flow:log", (e) => {
-        onLog(e.payload);
-      });
-
-      try {
-        await invoke("run_flow", {
-          nodes: nodesRef.current,
-          edges: edgesRef.current,
-          context,
-        });
-      } catch (err) {
-        console.error("[runFlow]", err);
-      } finally {
-        unlistenStatus?.();
-        unlistenLog?.();
-        setRunning(false);
-      }
-    })();
-  }, [running, environments, activeEnvironment, onLog]);
+    // Invoke — event listeners are always-on (see useEffect above)
+    void invoke("run_flow", {
+      flowId: flowFilename,
+      nodes: nodesRef.current,
+      edges: edgesRef.current,
+      context,
+    }).catch((err) => console.error("[runFlow]", err));
+  }, [running, flowFilename, environments, activeEnvironment]);
 
   const stop = useCallback(() => {
-    void invoke("stop_flow");
-  }, []);
+    void invoke("stop_flow", { flowId: flowFilename });
+  }, [flowFilename]);
 
   // ── Build flow to binary ──────────────────────────────────────
   const [building, setBuilding] = useState(false);

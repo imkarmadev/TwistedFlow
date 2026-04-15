@@ -55,6 +55,17 @@ impl Node for SendResponseNode {
                 }
             }
 
+            // Merge dynamically wired headers (overrides static config)
+            if let Some(Value::Object(obj)) = ctx.resolve_input("in:headers").await {
+                for (k, v) in obj {
+                    let val_str = match &v {
+                        Value::String(s) => s.clone(),
+                        other => other.to_string(),
+                    };
+                    headers.insert(k, val_str);
+                }
+            }
+
             // Find the _requestId from the OnEvent listener's outputs.
             // The HTTP Listen node puts it in the event payload.
             let request_id = {

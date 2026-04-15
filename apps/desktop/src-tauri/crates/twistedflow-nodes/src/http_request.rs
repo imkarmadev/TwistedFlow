@@ -88,7 +88,8 @@ impl Node for HttpRequestNode {
                     Some(body)
                 };
 
-            // Step 7: execute HTTP
+            // Step 7: execute HTTP (with timing)
+            let start_time = std::time::Instant::now();
             let response = match exec_http(
                 &ctx.opts.http_client,
                 &HttpRequest {
@@ -108,6 +109,7 @@ impl Node for HttpRequestNode {
                     };
                 }
             };
+            let response_time_ms = start_time.elapsed().as_millis() as u64;
 
             // Step 8: parse response body
             let parsed: Value = if response.body.is_empty() {
@@ -132,6 +134,14 @@ impl Node for HttpRequestNode {
                 }
             }
 
+            // Response headers as a direct output pin
+            let resp_headers: HashMap<String, String> =
+                response.headers.iter().cloned().collect();
+            out.insert("responseHeaders".into(), json!(resp_headers));
+
+            // Response time in milliseconds
+            out.insert("responseTime".into(), json!(response_time_ms));
+
             let header_map_for_req: HashMap<String, String> =
                 headers.iter().cloned().collect();
             out.insert(
@@ -141,6 +151,7 @@ impl Node for HttpRequestNode {
                     "url": final_url,
                     "headers": header_map_for_req,
                     "status": response.status,
+                    "responseTime": response_time_ms,
                 }),
             );
 

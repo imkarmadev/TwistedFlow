@@ -116,6 +116,60 @@ export function InspectorPanel({
             data={(node.data ?? {}) as Record<string, unknown>}
             onChange={(d) => onChange(node.id, d)}
           />
+        ) : node.type === "route" ? (
+          <RouteEditor
+            data={(node.data ?? {}) as Record<string, unknown>}
+            onChange={(d) => onChange(node.id, d)}
+          />
+        ) : node.type === "parseBody" ? (
+          <ParseBodyEditor
+            data={(node.data ?? {}) as Record<string, unknown>}
+            onChange={(d) => onChange(node.id, d)}
+          />
+        ) : node.type === "setHeaders" ? (
+          <SetHeadersEditor
+            data={(node.data ?? {}) as Record<string, unknown>}
+            onChange={(d) => onChange(node.id, d)}
+          />
+        ) : node.type === "cors" ? (
+          <CorsEditor
+            data={(node.data ?? {}) as Record<string, unknown>}
+            onChange={(d) => onChange(node.id, d)}
+          />
+        ) : node.type === "verifyAuth" ? (
+          <VerifyAuthEditor
+            data={(node.data ?? {}) as Record<string, unknown>}
+            onChange={(d) => onChange(node.id, d)}
+          />
+        ) : node.type === "rateLimit" ? (
+          <RateLimitEditor
+            data={(node.data ?? {}) as Record<string, unknown>}
+            onChange={(d) => onChange(node.id, d)}
+          />
+        ) : node.type === "cookie" ? (
+          <CookieEditor
+            data={(node.data ?? {}) as Record<string, unknown>}
+            onChange={(d) => onChange(node.id, d)}
+          />
+        ) : node.type === "redirect" ? (
+          <SystemFieldEditor
+            data={(node.data ?? {}) as Record<string, unknown>}
+            onChange={(d) => onChange(node.id, d)}
+            fields={[
+              { key: "status", label: "Status Code (301/302/307/308)", placeholder: "302", type: "number" },
+              { key: "url", label: "Redirect URL", placeholder: "/new-path or #{url}" },
+            ]}
+          />
+        ) : node.type === "serveStatic" ? (
+          <SystemFieldEditor
+            data={(node.data ?? {}) as Record<string, unknown>}
+            onChange={(d) => onChange(node.id, d)}
+            fields={[
+              { key: "rootDir", label: "Root Directory", placeholder: "./public" },
+              { key: "indexFile", label: "Index File", placeholder: "index.html" },
+              { key: "stripPrefix", label: "Strip Prefix", placeholder: "/static" },
+            ]}
+          />
         ) : node.type === "match" ? (
           <MatchEditor
             data={(node.data ?? {}) as Record<string, unknown>}
@@ -690,6 +744,613 @@ function MatchEditor({ data, onChange }: MatchEditorProps) {
           the <strong>default</strong> output fires.
         </div>
       </div>
+    </div>
+  );
+}
+
+// ─── Route editor ──────────────────────────────────────────────
+
+const ROUTE_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "*"] as const;
+
+interface RouteEditorProps {
+  data: Record<string, unknown>;
+  onChange: (data: Record<string, unknown>) => void;
+}
+
+interface RouteDef {
+  method: string;
+  path: string;
+  label?: string;
+}
+
+function RouteEditor({ data, onChange }: RouteEditorProps) {
+  const routes = ((data.routes as RouteDef[]) ?? []) as RouteDef[];
+  const updateRoutes = (next: RouteDef[]) =>
+    onChange({ ...data, routes: next });
+
+  const addRoute = () => updateRoutes([...routes, { method: "GET", path: "/", label: "" }]);
+  const removeRoute = (i: number) =>
+    updateRoutes(routes.filter((_, idx) => idx !== i));
+  const updateRoute = (i: number, patch: Partial<RouteDef>) =>
+    updateRoutes(routes.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
+
+  return (
+    <div className={s.form}>
+      <div className={s.field}>
+        <div className={s.labelRow}>
+          <label className={s.label}>Routes</label>
+          <button className={s.smallBtn} onClick={addRoute}>
+            + add
+          </button>
+        </div>
+        {routes.length === 0 && (
+          <div className={s.subtleHint}>
+            No routes — only the "not found" branch will fire.
+          </div>
+        )}
+        {routes.map((r, i) => (
+          <div className={s.headerRow} key={i}>
+            <select
+              className={s.input}
+              style={{ flex: "0 0 80px" }}
+              value={r.method}
+              onChange={(e) => updateRoute(i, { method: e.target.value })}
+            >
+              {ROUTE_METHODS.map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
+              ))}
+            </select>
+            <input
+              className={s.input}
+              value={r.path}
+              onChange={(e) => updateRoute(i, { path: e.target.value })}
+              placeholder="/users/:id"
+              spellCheck={false}
+            />
+            <input
+              className={s.input}
+              style={{ flex: "0 0 80px" }}
+              value={r.label ?? ""}
+              onChange={(e) => updateRoute(i, { label: e.target.value })}
+              placeholder="label"
+              spellCheck={false}
+            />
+            <button className={s.removeBtn} onClick={() => removeRoute(i)}>
+              ×
+            </button>
+          </div>
+        ))}
+        <div className={s.schemaHint}>
+          Each route gets its own exec output. Use <code>:param</code> in
+          paths to extract parameters (e.g. <code>/users/:id</code>).
+          Extracted params are available on the <strong>params</strong> output pin.
+          The first matching route wins.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Parse Body editor ─────────────────────────────────────────
+
+const PARSE_BODY_MODES = [
+  { value: "auto", label: "Auto-detect" },
+  { value: "json", label: "JSON" },
+  { value: "form", label: "Form (URL-encoded)" },
+  { value: "text", label: "Plain text" },
+] as const;
+
+interface ParseBodyEditorProps {
+  data: Record<string, unknown>;
+  onChange: (data: Record<string, unknown>) => void;
+}
+
+function ParseBodyEditor({ data, onChange }: ParseBodyEditorProps) {
+  const expect = (data.expect as string) ?? "auto";
+
+  return (
+    <div className={s.form}>
+      <div className={s.field}>
+        <label className={s.label}>Parse Mode</label>
+        <select
+          className={s.input}
+          value={expect}
+          onChange={(e) => onChange({ ...data, expect: e.target.value })}
+        >
+          {PARSE_BODY_MODES.map((m) => (
+            <option key={m.value} value={m.value}>
+              {m.label}
+            </option>
+          ))}
+        </select>
+        <div className={s.schemaHint}>
+          <strong>Auto-detect</strong> reads the Content-Type header.
+          Force a mode to skip detection.
+          The <strong>parsed</strong> output pin emits the structured value.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Set Headers editor ────────────────────────────────────────
+
+interface SetHeadersEditorProps {
+  data: Record<string, unknown>;
+  onChange: (data: Record<string, unknown>) => void;
+}
+
+interface HeaderDef {
+  key: string;
+  value: string;
+  enabled?: boolean;
+}
+
+function SetHeadersEditor({ data, onChange }: SetHeadersEditorProps) {
+  const headers = ((data.headers as HeaderDef[]) ?? []) as HeaderDef[];
+  const updateHeaders = (next: HeaderDef[]) =>
+    onChange({ ...data, headers: next });
+
+  const addHeader = () =>
+    updateHeaders([...headers, { key: "", value: "", enabled: true }]);
+  const removeHeader = (i: number) =>
+    updateHeaders(headers.filter((_, idx) => idx !== i));
+  const updateHeader = (i: number, patch: Partial<HeaderDef>) =>
+    updateHeaders(headers.map((h, idx) => (idx === i ? { ...h, ...patch } : h)));
+
+  return (
+    <div className={s.form}>
+      <div className={s.field}>
+        <div className={s.labelRow}>
+          <label className={s.label}>Headers</label>
+          <button className={s.smallBtn} onClick={addHeader}>
+            + add
+          </button>
+        </div>
+        {headers.length === 0 && (
+          <div className={s.subtleHint}>No headers configured.</div>
+        )}
+        {headers.map((h, i) => (
+          <div className={s.headerRow} key={i}>
+            <input
+              className={s.input}
+              value={h.key}
+              onChange={(e) => updateHeader(i, { key: e.target.value })}
+              placeholder="Header-Name"
+              spellCheck={false}
+            />
+            <input
+              className={s.input}
+              value={h.value}
+              onChange={(e) => updateHeader(i, { value: e.target.value })}
+              placeholder="value or #{token}"
+              spellCheck={false}
+            />
+            <button className={s.removeBtn} onClick={() => removeHeader(i)}>
+              ×
+            </button>
+          </div>
+        ))}
+        <div className={s.schemaHint}>
+          Use <code>{"#{name}"}</code> in values to reference wired input pins.
+          Wire an object into <strong>merge</strong> to combine with upstream headers.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── CORS editor ───────────────────────────────────────────────
+
+interface CorsEditorProps {
+  data: Record<string, unknown>;
+  onChange: (data: Record<string, unknown>) => void;
+}
+
+function CorsEditor({ data, onChange }: CorsEditorProps) {
+  const update = (patch: Record<string, unknown>) =>
+    onChange({ ...data, ...patch });
+
+  return (
+    <div className={s.form}>
+      <div className={s.field}>
+        <label className={s.label}>Allow Origins</label>
+        <input
+          className={s.input}
+          value={(data.allowOrigins as string) ?? "*"}
+          onChange={(e) => update({ allowOrigins: e.target.value })}
+          placeholder="* or https://example.com, https://app.example.com"
+          spellCheck={false}
+        />
+        <div className={s.schemaHint}>
+          Use <code>*</code> for all origins, or a comma-separated list.
+        </div>
+      </div>
+      <div className={s.field}>
+        <label className={s.label}>Allow Methods</label>
+        <input
+          className={s.input}
+          value={(data.allowMethods as string) ?? "GET, POST, PUT, DELETE, PATCH, OPTIONS"}
+          onChange={(e) => update({ allowMethods: e.target.value })}
+          spellCheck={false}
+        />
+      </div>
+      <div className={s.field}>
+        <label className={s.label}>Allow Headers</label>
+        <input
+          className={s.input}
+          value={(data.allowHeaders as string) ?? "Content-Type, Authorization"}
+          onChange={(e) => update({ allowHeaders: e.target.value })}
+          spellCheck={false}
+        />
+      </div>
+      <div className={s.field}>
+        <label className={s.label}>Max Age (seconds)</label>
+        <input
+          className={s.input}
+          type="number"
+          value={String(data.maxAge ?? 86400)}
+          onChange={(e) => update({ maxAge: Number(e.target.value) || 0 })}
+        />
+      </div>
+      <div className={s.field}>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+          <input
+            type="checkbox"
+            checked={!!data.allowCredentials}
+            onChange={(e) => update({ allowCredentials: e.target.checked })}
+          />
+          <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>
+            Allow Credentials
+          </span>
+        </label>
+      </div>
+    </div>
+  );
+}
+
+// ─── Verify Auth editor ────────────────────────────────────────
+
+const AUTH_MODES = [
+  { value: "bearer", label: "Bearer (extract only)" },
+  { value: "jwt", label: "JWT (HS256 verify)" },
+  { value: "apiKey", label: "API Key" },
+  { value: "basic", label: "Basic Auth" },
+] as const;
+
+interface VerifyAuthEditorProps {
+  data: Record<string, unknown>;
+  onChange: (data: Record<string, unknown>) => void;
+}
+
+function VerifyAuthEditor({ data, onChange }: VerifyAuthEditorProps) {
+  const mode = (data.mode as string) ?? "bearer";
+  const update = (patch: Record<string, unknown>) =>
+    onChange({ ...data, ...patch });
+
+  return (
+    <div className={s.form}>
+      <div className={s.field}>
+        <label className={s.label}>Auth Mode</label>
+        <select
+          className={s.input}
+          value={mode}
+          onChange={(e) => update({ mode: e.target.value })}
+        >
+          {AUTH_MODES.map((m) => (
+            <option key={m.value} value={m.value}>
+              {m.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {mode === "jwt" && (
+        <div className={s.field}>
+          <label className={s.label}>JWT Secret</label>
+          <input
+            className={s.input}
+            type="password"
+            value={(data.jwtSecret as string) ?? ""}
+            onChange={(e) => update({ jwtSecret: e.target.value })}
+            placeholder="or wire in:secret from Env Var"
+            spellCheck={false}
+          />
+          <div className={s.schemaHint}>
+            HS256 only. Wire <strong>in:secret</strong> from an Env Var node
+            instead of hardcoding here.
+          </div>
+        </div>
+      )}
+
+      {mode === "apiKey" && (
+        <>
+          <div className={s.field}>
+            <label className={s.label}>Header Name</label>
+            <input
+              className={s.input}
+              value={(data.apiKeyHeader as string) ?? "X-API-Key"}
+              onChange={(e) => update({ apiKeyHeader: e.target.value })}
+              spellCheck={false}
+            />
+          </div>
+          <div className={s.field}>
+            <label className={s.label}>Valid Keys (comma-separated)</label>
+            <input
+              className={s.input}
+              value={(data.apiKeyValues as string) ?? ""}
+              onChange={(e) => update({ apiKeyValues: e.target.value })}
+              placeholder="key1, key2 — or wire in:validKeys"
+              spellCheck={false}
+            />
+            <div className={s.schemaHint}>
+              Leave empty to skip validation (just extract the key).
+              Or wire <strong>in:validKeys</strong> array from upstream.
+            </div>
+          </div>
+        </>
+      )}
+
+      <div className={s.field}>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+          <input
+            type="checkbox"
+            checked={!!data.optional}
+            onChange={(e) => update({ optional: e.target.checked })}
+          />
+          <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>
+            Optional (missing auth passes with null claims)
+          </span>
+        </label>
+      </div>
+    </div>
+  );
+}
+
+// ─── Rate Limit editor ─────────────────────────────────────────
+
+interface RateLimitEditorProps {
+  data: Record<string, unknown>;
+  onChange: (data: Record<string, unknown>) => void;
+}
+
+const KEY_SOURCES = [
+  { value: "ip", label: "IP Address (X-Forwarded-For)" },
+  { value: "header", label: "Custom Header" },
+  { value: "custom", label: "Custom (wire in:key)" },
+] as const;
+
+function RateLimitEditor({ data, onChange }: RateLimitEditorProps) {
+  const keySource = (data.keySource as string) ?? "ip";
+  const update = (patch: Record<string, unknown>) =>
+    onChange({ ...data, ...patch });
+
+  return (
+    <div className={s.form}>
+      <div className={s.field}>
+        <label className={s.label}>Max Requests</label>
+        <input
+          className={s.input}
+          type="number"
+          value={String(data.maxRequests ?? 100)}
+          onChange={(e) => update({ maxRequests: Number(e.target.value) || 100 })}
+        />
+      </div>
+      <div className={s.field}>
+        <label className={s.label}>Window (ms)</label>
+        <input
+          className={s.input}
+          type="number"
+          value={String(data.windowMs ?? 60000)}
+          onChange={(e) => update({ windowMs: Number(e.target.value) || 60000 })}
+        />
+        <div className={s.schemaHint}>
+          60000 = 1 minute, 3600000 = 1 hour
+        </div>
+      </div>
+      <div className={s.field}>
+        <label className={s.label}>Key Source</label>
+        <select
+          className={s.input}
+          value={keySource}
+          onChange={(e) => update({ keySource: e.target.value })}
+        >
+          {KEY_SOURCES.map((k) => (
+            <option key={k.value} value={k.value}>
+              {k.label}
+            </option>
+          ))}
+        </select>
+      </div>
+      {keySource === "header" && (
+        <div className={s.field}>
+          <label className={s.label}>Header Name</label>
+          <input
+            className={s.input}
+            value={(data.keyHeader as string) ?? "X-Forwarded-For"}
+            onChange={(e) => update({ keyHeader: e.target.value })}
+            spellCheck={false}
+          />
+        </div>
+      )}
+      <div className={s.schemaHint}>
+        Wire <strong>in:key</strong> to override the key source with a custom
+        value (e.g., user ID from Verify Auth claims).
+      </div>
+    </div>
+  );
+}
+
+// ─── Cookie editor ─────────────────────────────────────────────
+
+const COOKIE_MODES = [
+  { value: "parse", label: "Parse (read cookies)" },
+  { value: "set", label: "Set (build Set-Cookie)" },
+] as const;
+
+const SAME_SITE_OPTIONS = ["Strict", "Lax", "None"] as const;
+
+interface CookieEditorProps {
+  data: Record<string, unknown>;
+  onChange: (data: Record<string, unknown>) => void;
+}
+
+interface CookieDef {
+  name: string;
+  value: string;
+  path?: string;
+  domain?: string;
+  maxAge?: number;
+  httpOnly?: boolean;
+  secure?: boolean;
+  sameSite?: string;
+}
+
+function CookieEditor({ data, onChange }: CookieEditorProps) {
+  const mode = (data.mode as string) ?? "parse";
+  const setCookies = ((data.setCookies as CookieDef[]) ?? []) as CookieDef[];
+  const update = (patch: Record<string, unknown>) =>
+    onChange({ ...data, ...patch });
+  const updateCookies = (next: CookieDef[]) =>
+    update({ setCookies: next });
+
+  return (
+    <div className={s.form}>
+      <div className={s.field}>
+        <label className={s.label}>Mode</label>
+        <select
+          className={s.input}
+          value={mode}
+          onChange={(e) => update({ mode: e.target.value })}
+        >
+          {COOKIE_MODES.map((m) => (
+            <option key={m.value} value={m.value}>
+              {m.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {mode === "parse" && (
+        <div className={s.schemaHint}>
+          Wire <strong>in:headers</strong> from HTTP Listen. The
+          <strong> cookies</strong> output pin emits a name-value object.
+        </div>
+      )}
+
+      {mode === "set" && (
+        <div className={s.field}>
+          <div className={s.labelRow}>
+            <label className={s.label}>Cookies</label>
+            <button
+              className={s.smallBtn}
+              onClick={() =>
+                updateCookies([
+                  ...setCookies,
+                  { name: "", value: "", path: "/", httpOnly: true, secure: false, sameSite: "Lax" },
+                ])
+              }
+            >
+              + add
+            </button>
+          </div>
+          {setCookies.length === 0 && (
+            <div className={s.subtleHint}>No cookies configured.</div>
+          )}
+          {setCookies.map((c, i) => (
+            <div key={i} style={{ marginBottom: 8, borderBottom: "1px solid var(--border)", paddingBottom: 8 }}>
+              <div className={s.headerRow}>
+                <input
+                  className={s.input}
+                  value={c.name}
+                  onChange={(e) => {
+                    const next = [...setCookies];
+                    next[i] = { ...next[i]!, name: e.target.value };
+                    updateCookies(next);
+                  }}
+                  placeholder="name"
+                  spellCheck={false}
+                />
+                <input
+                  className={s.input}
+                  value={c.value}
+                  onChange={(e) => {
+                    const next = [...setCookies];
+                    next[i] = { ...next[i]!, value: e.target.value };
+                    updateCookies(next);
+                  }}
+                  placeholder="value or #{token}"
+                  spellCheck={false}
+                />
+                <button
+                  className={s.removeBtn}
+                  onClick={() => updateCookies(setCookies.filter((_, j) => j !== i))}
+                >
+                  ×
+                </button>
+              </div>
+              <div className={s.headerRow} style={{ marginTop: 4 }}>
+                <input
+                  className={s.input}
+                  style={{ flex: "0 0 60px" }}
+                  value={c.path ?? "/"}
+                  onChange={(e) => {
+                    const next = [...setCookies];
+                    next[i] = { ...next[i]!, path: e.target.value };
+                    updateCookies(next);
+                  }}
+                  placeholder="path"
+                  spellCheck={false}
+                />
+                <select
+                  className={s.input}
+                  style={{ flex: "0 0 70px" }}
+                  value={c.sameSite ?? "Lax"}
+                  onChange={(e) => {
+                    const next = [...setCookies];
+                    next[i] = { ...next[i]!, sameSite: e.target.value };
+                    updateCookies(next);
+                  }}
+                >
+                  {SAME_SITE_OPTIONS.map((o) => (
+                    <option key={o} value={o}>{o}</option>
+                  ))}
+                </select>
+                <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11 }}>
+                  <input
+                    type="checkbox"
+                    checked={c.httpOnly ?? false}
+                    onChange={(e) => {
+                      const next = [...setCookies];
+                      next[i] = { ...next[i]!, httpOnly: e.target.checked };
+                      updateCookies(next);
+                    }}
+                  />
+                  HttpOnly
+                </label>
+                <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11 }}>
+                  <input
+                    type="checkbox"
+                    checked={c.secure ?? false}
+                    onChange={(e) => {
+                      const next = [...setCookies];
+                      next[i] = { ...next[i]!, secure: e.target.checked };
+                      updateCookies(next);
+                    }}
+                  />
+                  Secure
+                </label>
+              </div>
+            </div>
+          ))}
+          <div className={s.schemaHint}>
+            Use <code>{"#{name}"}</code> in values to reference wired inputs.
+            Wire <strong>setCookieHeaders</strong> into Send Response <strong>in:headers</strong>.
+          </div>
+        </div>
+      )}
     </div>
   );
 }

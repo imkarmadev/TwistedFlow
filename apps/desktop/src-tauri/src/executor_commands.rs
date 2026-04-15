@@ -1,6 +1,11 @@
 //! Tauri commands for flow execution — bridges the Rust engine to the frontend.
+//!
+//! Supports running multiple flows in parallel. Each flow is identified by
+//! `flow_id` (the flow filename). Starting the same flow again cancels the
+//! previous run of that flow only.
 
 use serde::Serialize;
+use std::collections::HashMap;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State};
 use tokio_util::sync::CancellationToken;
@@ -8,14 +13,15 @@ use twistedflow_engine::{
     ExecContext, FlowGraph, GraphIndex, LogEntry, RunFlowOpts, StatusEvent,
 };
 
-/// Shared state for the active run. One run at a time.
+/// Shared state for active runs. Supports multiple concurrent flows.
 pub struct ExecutorState {
-    pub cancel: std::sync::Mutex<Option<CancellationToken>>,
+    pub tokens: std::sync::Mutex<HashMap<String, CancellationToken>>,
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct StatusEventPayload {
+    flow_id: String,
     node_id: String,
     #[serde(flatten)]
     event: StatusEvent,
@@ -24,6 +30,7 @@ struct StatusEventPayload {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct LogEntryPayload {
+    flow_id: String,
     node_id: String,
     label: String,
     value: serde_json::Value,
@@ -32,6 +39,7 @@ struct LogEntryPayload {
 #[tauri::command]
 pub async fn run_flow(
     app: AppHandle,
+    flow_id: String,
     nodes: serde_json::Value,
     edges: serde_json::Value,
     context: serde_json::Value,
@@ -49,32 +57,38 @@ pub async fn run_flow(
     };
     let index = Arc::new(GraphIndex::build(&graph));
 
-    // Set up cancellation
+    // Set up cancellation — only cancel the same flow if already running
     let cancel = CancellationToken::new();
     {
-        let mut guard = executor_state.cancel.lock().unwrap();
-        // Cancel any previously running flow
-        if let Some(old) = guard.take() {
+        let mut guard = executor_state.tokens.lock().unwrap();
+        if let Some(old) = guard.remove(&flow_id) {
             old.cancel();
         }
-        *guard = Some(cancel.clone());
+        guard.insert(flow_id.clone(), cancel.clone());
     }
 
-    // Status emitter → Tauri events
+    // Notify frontend that this flow started
+    let _ = app.emit("flow:started", serde_json::json!({ "flowId": &flow_id }));
+
+    // Status emitter → Tauri events (scoped by flow_id)
     let app_for_status = app.clone();
+    let fid_status = flow_id.clone();
     let on_status: Box<dyn Fn(&str, StatusEvent) + Send + Sync> =
         Box::new(move |node_id: &str, event: StatusEvent| {
             let payload = StatusEventPayload {
+                flow_id: fid_status.clone(),
                 node_id: node_id.to_owned(),
                 event,
             };
             let _ = app_for_status.emit("flow:status", &payload);
         });
 
-    // Log emitter → Tauri events
+    // Log emitter → Tauri events (scoped by flow_id)
     let app_for_log = app.clone();
+    let fid_log = flow_id.clone();
     let on_log: Box<dyn Fn(LogEntry) + Send + Sync> = Box::new(move |entry: LogEntry| {
         let payload = LogEntryPayload {
+            flow_id: fid_log.clone(),
             node_id: entry.node_id,
             label: entry.label,
             value: entry.value,
@@ -112,22 +126,30 @@ pub async fn run_flow(
     // Run the engine
     let result = twistedflow_engine::run_flow(opts).await;
 
-    // Clear cancel token
+    // Clean up: remove token and notify frontend
     {
-        let mut guard = executor_state.cancel.lock().unwrap();
-        *guard = None;
+        let mut guard = executor_state.tokens.lock().unwrap();
+        guard.remove(&flow_id);
     }
+    let _ = app.emit("flow:finished", serde_json::json!({ "flowId": &flow_id }));
 
     result
 }
 
 #[tauri::command]
-pub fn stop_flow(executor_state: State<'_, ExecutorState>) -> Result<(), String> {
-    let guard = executor_state.cancel.lock().unwrap();
-    if let Some(token) = guard.as_ref() {
+pub fn stop_flow(flow_id: String, executor_state: State<'_, ExecutorState>) -> Result<(), String> {
+    let mut guard = executor_state.tokens.lock().unwrap();
+    if let Some(token) = guard.remove(&flow_id) {
         token.cancel();
     }
     Ok(())
+}
+
+/// Returns the list of currently running flow IDs.
+#[tauri::command]
+pub fn running_flows(executor_state: State<'_, ExecutorState>) -> Vec<String> {
+    let guard = executor_state.tokens.lock().unwrap();
+    guard.keys().cloned().collect()
 }
 
 /// Return metadata for all available node types (built-in + WASM plugins).

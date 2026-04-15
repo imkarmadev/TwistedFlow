@@ -74,9 +74,9 @@ pub fn run() {
                 }
             });
 
-            // Executor state (cancellation token for active run)
+            // Executor state (supports multiple concurrent flows)
             app.manage(executor_commands::ExecutorState {
-                cancel: Mutex::new(None),
+                tokens: Mutex::new(std::collections::HashMap::new()),
             });
 
             Ok(())
@@ -102,6 +102,7 @@ pub fn run() {
             // Executor
             executor_commands::run_flow,
             executor_commands::stop_flow,
+            executor_commands::running_flows,
             executor_commands::list_node_types,
             executor_commands::build_flow,
         ])
