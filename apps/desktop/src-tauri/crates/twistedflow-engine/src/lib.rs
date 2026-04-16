@@ -19,4 +19,4 @@ pub use node::{
 };
 pub use flow_file::FlowFile;
 pub use template::{input_pins_for, render_template};
-pub use wasm_host::{load_wasm_plugins, DEFAULT_PLUGINS_DIR};
+pub use wasm_host::{load_wasm_plugins, validate_wasm, DEFAULT_PLUGINS_DIR};

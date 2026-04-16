@@ -1,0 +1,17 @@
+[package]
+name = "twistedflow-plugin-json-tools"
+version = "0.1.0"
+edition = "2021"
+description = "JSON manipulation nodes — pretty, minify, path-extract"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+twistedflow-plugin = { path = "../../../apps/desktop/src-tauri/crates/twistedflow-plugin" }
+
+[profile.release]
+strip = true
+lto = true
+opt-level = "z"
+codegen-units = 1

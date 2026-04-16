@@ -5,6 +5,7 @@
 //!   twistedflow build <flow.json or project dir> -o <binary>
 
 mod build;
+mod plugin;
 
 // Ensure twistedflow-nodes is linked so inventory discovers all built-in nodes.
 extern crate twistedflow_nodes;
@@ -74,6 +75,11 @@ enum Commands {
         #[arg(long)]
         debug: bool,
     },
+    /// WASM plugin authoring commands
+    Plugin {
+        #[command(subcommand)]
+        cmd: plugin::PluginCmd,
+    },
 }
 
 #[tokio::main]
@@ -95,6 +101,20 @@ async fn main() {
         Commands::Build { project, output, flow, env, debug } => {
             if let Err(e) = build::build(&project, &output, flow.as_deref(), &env, !debug) {
                 eprintln!("Build failed: {}", e);
+                std::process::exit(1);
+            }
+        }
+        Commands::Plugin { cmd } => {
+            let result = match cmd {
+                plugin::PluginCmd::New { name, category, description, nodes, force } => {
+                    plugin::run_new(&name, &category, &description, &nodes, force)
+                }
+                plugin::PluginCmd::Build { install, no_install, debug } => {
+                    plugin::run_build(install, no_install, debug)
+                }
+            };
+            if let Err(e) = result {
+                eprintln!("Error: {}", e);
                 std::process::exit(1);
             }
         }
@@ -190,7 +210,7 @@ async fn run_flow(
         });
 
     let quiet_log = quiet;
-    let on_log: Box<dyn Fn(LogEntry) + Send + Sync> = Box::new(move |entry: LogEntry| {
+    let on_log: Arc<dyn Fn(LogEntry) + Send + Sync> = Arc::new(move |entry: LogEntry| {
         if quiet_log {
             return;
         }

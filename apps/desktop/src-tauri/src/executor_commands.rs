@@ -86,7 +86,7 @@ pub async fn run_flow(
     // Log emitter → Tauri events (scoped by flow_id)
     let app_for_log = app.clone();
     let fid_log = flow_id.clone();
-    let on_log: Box<dyn Fn(LogEntry) + Send + Sync> = Box::new(move |entry: LogEntry| {
+    let on_log: Arc<dyn Fn(LogEntry) + Send + Sync> = Arc::new(move |entry: LogEntry| {
         let payload = LogEntryPayload {
             flow_id: fid_log.clone(),
             node_id: entry.node_id,

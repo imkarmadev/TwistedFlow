@@ -106,7 +106,7 @@ CLI binary with two subcommands:
 
 ### `twistedflow-plugin`
 
-Guest SDK for WASM plugin authors. Provides the trait and types that plugins implement.
+Guest SDK for WASM plugin authors. Provides the declarative `nodes!` macro, typed `PluginInputs` / `PluginOutputs` builders, and `host::log` callback. No trait to implement — the macro generates the ABI exports.
 
 ---
 
@@ -221,7 +221,7 @@ Plugins extend TwistedFlow with custom node types distributed as `.wasm` files.
 
 **Runtime:** wasmtime 29. The engine's `wasm_host.rs` loads each `.wasm`, wraps it as a `Box<dyn Node>`, and adds it to the registry alongside built-in nodes.
 
-**Writing plugins:** Use the `twistedflow-plugin` guest SDK. Implement the guest trait, compile to wasm32-wasi, drop the `.wasm` file in place.
+**Writing plugins:** Use the `twistedflow-plugin` guest SDK with its declarative `nodes!` macro. Target `wasm32-wasip1`. Either run `twistedflow plugin new <name>` to scaffold + `twistedflow plugin build` to compile and install, or do it by hand with `cargo build --target wasm32-wasip1 --release` and manual copy. Host callbacks available: `host::log` routes to the console panel. See [docs/plugins.md](docs/plugins.md) for the full guide.
 
 ---
 

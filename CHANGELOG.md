@@ -2,6 +2,29 @@
 
 All notable changes to TwistedFlow are documented here.
 
+## [1.3.0] — 2026-04-16
+
+### Added — WASM Plugin Developer Experience
+
+- **`twistedflow plugin new <name>`** — scaffolds a complete plugin crate (Cargo.toml with cdylib + SDK dep + optimized release profile, stub src/lib.rs with one node per `--node` flag, .gitignore, README). SDK path resolution: in-tree relative path → `TWISTEDFLOW_PLUGIN_SDK_PATH` env var → git fallback.
+- **`twistedflow plugin build`** — compiles to `wasm32-wasip1`, validates exports + metadata, auto-installs to `./nodes/` if present, else `~/.twistedflow/plugins/`. Catches broken plugins before deployment.
+- **`host::log(msg)`** — plugins can now log messages that route into the TwistedFlow console panel (desktop) or stdout (CLI) tagged with the invoking node's id. Same stream as the built-in Log node.
+- **Load-time validation** — checks for required `tf_metadata` + `tf_execute` exports with clear error messages, warns on invalid pin `data_type` values.
+- **Second example plugin** — `examples/plugins/json-tools/` demonstrates multi-node plugins, object handling, `host::log` callbacks, and error paths (JSON Pretty, JSON Minify, JSON Path extract).
+
+### Added — Documentation
+
+- **`docs/plugins.md`** — complete plugin author guide: 12 sections covering the `nodes!` macro, pin types, reading inputs, writing outputs, host callbacks, error handling, ABI details, testing, troubleshooting.
+- **`examples/plugins/README.md`** — index for all example plugins.
+- **docs.html** — rewrote plugins section: removed misinformation about "implementing the guest trait" (there is no trait), fixed `wasm32-wasi` → `wasm32-wasip1` references, added scaffold/build workflow, macro reference, host callbacks.
+
+### Changed
+
+- **`RunFlowOpts.on_log`** refactored from `Box<dyn Fn>` to `Arc<dyn Fn>` across executor / CLI / build template. Enables cloning the callback into the WASM store for the log adapter.
+- **ARCHITECTURE.md** — corrected SDK description and plugin authoring instructions.
+
+---
+
 ## [1.2.0] — 2026-04-14
 
 ### Added — REST API Server Nodes (10 new nodes)

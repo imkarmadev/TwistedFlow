@@ -27,6 +27,39 @@ pub use serde_json::{self, Value};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+// ── Host callbacks ──────────────────────────────────────────────────
+//
+// Plugins can call these to interact with the TwistedFlow host at runtime.
+// The host implements them via wasmtime Linker::func_wrap.
+
+/// Host-provided functions. These route to the TwistedFlow host when the
+/// plugin is running inside the engine. In test/unit contexts (non-WASM)
+/// they are no-ops.
+pub mod host {
+    #[cfg(target_arch = "wasm32")]
+    #[link(wasm_import_module = "env")]
+    extern "C" {
+        fn tf_log(ptr: *const u8, len: u32);
+    }
+
+    /// Log a message from the plugin. Appears in the TwistedFlow console
+    /// panel under the calling node's id. Safe to call from anywhere in
+    /// a node's `execute` body.
+    ///
+    /// In the CLI, messages print to stdout prefixed with `[plugin]`.
+    pub fn log(msg: &str) {
+        #[cfg(target_arch = "wasm32")]
+        {
+            let bytes = msg.as_bytes();
+            unsafe { tf_log(bytes.as_ptr(), bytes.len() as u32) }
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let _ = msg;
+        }
+    }
+}
+
 // ── Plugin metadata ─────────────────────────────────────────────────
 
 /// Pin definition for a plugin node's inputs/outputs.

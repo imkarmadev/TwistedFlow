@@ -1327,50 +1327,74 @@ cat urls.txt | <span class="cmd">twistedflow-cli</span> run ./flows/check-urls.f
       <!-- ═══ PLUGINS ═══ -->
       <section class="doc-section" id="plugins">
         <h1>WASM Plugins</h1>
-        <p class="subtitle">Extend TwistedFlow with custom nodes written in Rust (or anything that compiles to WASM).</p>
+        <p class="subtitle">Extend TwistedFlow with custom nodes written in Rust. One CLI command scaffolds, builds, and installs.</p>
 
         <h2>How it works</h2>
-        <p>TwistedFlow uses <a href="https://wasmtime.dev" target="_blank">wasmtime</a> to load WebAssembly modules as custom node types. Plugins appear in the node palette alongside built-in nodes.</p>
+        <p>TwistedFlow uses <a href="https://wasmtime.dev" target="_blank">wasmtime</a> to load WebAssembly modules as custom node types. Plugins appear in the node palette alongside built-in nodes, with no runtime performance penalty vs built-in Rust nodes for most workloads.</p>
 
         <h2>Plugin locations</h2>
-        <p>Plugins are loaded from two directories:</p>
+        <p>Plugins are loaded from two directories on every flow run:</p>
         <ol>
           <li><code>~/.twistedflow/plugins/</code> &mdash; global plugins, available in all projects</li>
           <li><code>{project}/nodes/</code> &mdash; project-scoped plugins, only available in that project</li>
         </ol>
-        <p>Drop a <code>.wasm</code> file into either directory. It's picked up automatically on the next flow run.</p>
 
-        <h2>Writing a plugin</h2>
-        <p>Use the <code>twistedflow-plugin</code> guest SDK crate to write plugins in Rust.</p>
+        <h2>Quick start</h2>
+        <p>Three commands from empty directory to installed plugin:</p>
+        <pre><code><span class="cmd">twistedflow</span> plugin new my-plugin <span class="flag">--category</span> Utility <span class="flag">--node</span> Hello
+<span class="comment"># edit my-plugin/src/lib.rs</span>
+cd my-plugin
+<span class="cmd">twistedflow</span> plugin build</code></pre>
+        <p>The <code>plugin new</code> command scaffolds a complete Rust crate (Cargo.toml, src/lib.rs, README, .gitignore). The <code>plugin build</code> command compiles to <code>wasm32-wasip1</code>, validates the output, and installs to the right directory automatically.</p>
 
-        <h3>1. Create a new Rust project</h3>
-        <pre><code>cargo new my-node --lib
-cd my-node</code></pre>
+        <h2>The <code>nodes!</code> macro</h2>
+        <p>Declare one or more nodes in a single <code>nodes! { ... }</code> block:</p>
+        <pre><code><span class="comment">use twistedflow_plugin::*;</span>
 
-        <h3>2. Add the SDK dependency</h3>
-        <pre><code><span class="comment"># Cargo.toml</span>
-[lib]
-crate-type = [<span class="str">"cdylib"</span>]
+nodes! {
+    node <span class="str">"Uppercase"</span> (
+        type_id = <span class="str">"uppercase"</span>,
+        category = <span class="str">"Text"</span>
+    ) {
+        inputs:  [{ key: <span class="str">"text"</span>,   data_type: <span class="str">"string"</span> }],
+        outputs: [{ key: <span class="str">"result"</span>, data_type: <span class="str">"string"</span> }],
+        execute: |inputs| {
+            let text = inputs.get_string(<span class="str">"text"</span>).unwrap_or_default();
+            PluginOutputs::new().set(<span class="str">"result"</span>, text.to_uppercase())
+        }
+    }
+}</code></pre>
 
-[dependencies]
-twistedflow-plugin = { path = <span class="str">"path/to/twistedflow-plugin"</span> }</code></pre>
+        <h2>Pin types</h2>
+        <table class="doc-table">
+          <thead><tr><th>Type</th><th>Reads from</th><th>Reader method</th></tr></thead>
+          <tbody>
+            <tr><td><code>string</code></td><td>text</td><td><code>get_string()</code></td></tr>
+            <tr><td><code>number</code></td><td>int or float</td><td><code>get_number()</code></td></tr>
+            <tr><td><code>boolean</code></td><td>true/false</td><td><code>get_bool()</code></td></tr>
+            <tr><td><code>object</code></td><td>JSON object</td><td><code>get_object()</code></td></tr>
+            <tr><td><code>array</code></td><td>JSON array</td><td><code>get_array()</code></td></tr>
+            <tr><td><code>unknown</code></td><td>anything</td><td><code>get_value()</code></td></tr>
+          </tbody>
+        </table>
 
-        <h3>3. Implement the node</h3>
-        <p>Implement the guest trait from the SDK. Define your node's metadata (name, category, pins) and execution logic.</p>
+        <h2>Host callbacks</h2>
+        <p>Plugins can call back into TwistedFlow. Currently one callback is exposed:</p>
+        <pre><code><span class="comment">// Print a message to the console panel (desktop) or stdout (CLI)</span>
+host::log(<span class="str">"starting heavy work"</span>);</code></pre>
+        <p>Messages appear in the same stream as the built-in Log node, tagged with the invoking node's id.</p>
 
-        <h3>4. Compile to WASM</h3>
-        <pre><code>cargo build --target wasm32-wasi --release
-<span class="comment"># Output: target/wasm32-wasi/release/my_node.wasm</span></code></pre>
-
-        <h3>5. Install</h3>
-        <pre><code><span class="comment"># Global install</span>
-cp target/wasm32-wasi/release/my_node.wasm ~/.twistedflow/plugins/
-
-<span class="comment"># Or project-scoped</span>
-cp target/wasm32-wasi/release/my_node.wasm ~/my-project/nodes/</code></pre>
+        <h2>Plugin validation</h2>
+        <p>When you run <code>twistedflow plugin build</code>, the built <code>.wasm</code> is validated before installation:</p>
+        <ul>
+          <li>Required exports (<code>tf_metadata</code>, <code>tf_execute</code>) must exist</li>
+          <li>Node metadata must parse as valid JSON</li>
+          <li>Pin <code>data_type</code> values must be from the valid set</li>
+        </ul>
+        <p>Invalid plugins fail with a clear error message — you won't silently ship a broken plugin.</p>
 
         <div class="callout">
-          <p><strong>Future:</strong> A plugin marketplace is planned where you can publish and discover community-built node packs.</p>
+          <p><strong>Full API reference and tutorials:</strong> see the <a href="https://github.com/imkarmadev/TwistedFlow/blob/main/docs/plugins.md" target="_blank">plugin author guide</a> on GitHub. Examples at <a href="https://github.com/imkarmadev/TwistedFlow/tree/main/examples/plugins" target="_blank">examples/plugins/</a>.</p>
         </div>
       </section>
 

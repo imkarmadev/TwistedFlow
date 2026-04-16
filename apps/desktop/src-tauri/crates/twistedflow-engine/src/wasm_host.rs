@@ -4,16 +4,31 @@
 //! - `tf_metadata() -> *const u8` — returns length-prefixed JSON: `[{name, typeId, ...}, ...]`
 //! - `tf_execute(type_id_ptr, type_id_len, inputs_ptr, inputs_len) -> *const u8` — returns length-prefixed JSON
 
-use crate::node::{Node, NodeCtx, NodeMetadata, NodeResult};
+use crate::node::{LogEntry, Node, NodeCtx, NodeMetadata, NodeResult};
 use serde::Deserialize;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
+use std::sync::Arc;
 use wasmtime::*;
 use wasmtime_wasi::preview1::WasiP1Ctx;
 use wasmtime_wasi::WasiCtxBuilder;
+
+/// Per-execution state threaded into WASM via `Store<PluginStoreData>`.
+/// Carries WASI plus host callbacks so imports like `tf_log` can route
+/// messages back to the flow-level log stream.
+pub struct PluginStoreData {
+    wasi: WasiP1Ctx,
+    on_log: Option<Arc<dyn Fn(String) + Send + Sync>>,
+}
+
+impl PluginStoreData {
+    fn new(wasi: WasiP1Ctx, on_log: Option<Arc<dyn Fn(String) + Send + Sync>>) -> Self {
+        Self { wasi, on_log }
+    }
+}
 
 /// Pin definition from plugin metadata.
 #[derive(Debug, Clone, Deserialize)]
@@ -68,13 +83,25 @@ impl Node for WasmNode {
             let inputs = ctx.resolve_all_inputs().await;
             let inputs_json = serde_json::to_string(&inputs).unwrap_or_else(|_| "{}".into());
 
-            // 2. Run WASM on a blocking thread (WASM execution is synchronous)
+            // 2. Build a log adapter so guest `host::log` routes into the
+            //    flow's on_log stream. Tagged with this node's id + "plugin".
+            let node_id = ctx.node_id.to_string();
+            let forward_log = ctx.opts.on_log.clone();
+            let log_cb: Arc<dyn Fn(String) + Send + Sync> = Arc::new(move |msg| {
+                forward_log(LogEntry {
+                    node_id: node_id.clone(),
+                    label: "plugin".to_string(),
+                    value: Value::String(msg),
+                });
+            });
+
+            // 3. Run WASM on a blocking thread (WASM execution is synchronous)
             let engine = self.engine.clone();
             let module = self.module.clone();
             let type_id = self.type_id.clone();
 
             let result = tokio::task::spawn_blocking(move || {
-                call_wasm_execute(&engine, &module, &type_id, &inputs_json)
+                call_wasm_execute(&engine, &module, &type_id, &inputs_json, Some(log_cb))
             })
             .await;
 
@@ -112,13 +139,40 @@ fn call_wasm_execute(
     module: &Module,
     type_id: &str,
     inputs_json: &str,
+    on_log: Option<Arc<dyn Fn(String) + Send + Sync>>,
 ) -> Result<String, String> {
-    let mut linker = Linker::<WasiP1Ctx>::new(engine);
-    wasmtime_wasi::preview1::add_to_linker_sync(&mut linker, |ctx| ctx)
+    let mut linker = Linker::<PluginStoreData>::new(engine);
+    wasmtime_wasi::preview1::add_to_linker_sync(&mut linker, |d: &mut PluginStoreData| &mut d.wasi)
         .map_err(|e| format!("WASI linker error: {}", e))?;
 
+    // Host import: tf_log(ptr, len) — read a UTF-8 string from guest memory
+    // and route to the store's on_log callback (or log::info! if none).
+    linker
+        .func_wrap(
+            "env",
+            "tf_log",
+            |mut caller: Caller<'_, PluginStoreData>, ptr: i32, len: i32| {
+                let memory = match caller.get_export("memory").and_then(|e| e.into_memory()) {
+                    Some(m) => m,
+                    None => return,
+                };
+                let data = memory.data(&caller);
+                let start = ptr as usize;
+                let end = start.saturating_add(len as usize);
+                if end > data.len() {
+                    return;
+                }
+                let msg = String::from_utf8_lossy(&data[start..end]).into_owned();
+                match caller.data().on_log.clone() {
+                    Some(cb) => cb(msg),
+                    None => log::info!("[wasm-plugin] {}", msg),
+                }
+            },
+        )
+        .map_err(|e| format!("Linker func_wrap tf_log: {}", e))?;
+
     let wasi_ctx = WasiCtxBuilder::new().build_p1();
-    let mut store = Store::new(engine, wasi_ctx);
+    let mut store = Store::new(engine, PluginStoreData::new(wasi_ctx, on_log));
 
     let instance = linker
         .instantiate(&mut store, module)
@@ -176,12 +230,33 @@ fn call_wasm_execute(
 
 /// Read metadata from a WASM module.
 fn read_wasm_metadata(engine: &Engine, module: &Module) -> Result<Vec<PluginNodeDef>, String> {
-    let mut linker = Linker::<WasiP1Ctx>::new(engine);
-    wasmtime_wasi::preview1::add_to_linker_sync(&mut linker, |ctx| ctx)
+    let mut linker = Linker::<PluginStoreData>::new(engine);
+    wasmtime_wasi::preview1::add_to_linker_sync(&mut linker, |d: &mut PluginStoreData| &mut d.wasi)
         .map_err(|e| format!("WASI linker error: {}", e))?;
 
+    // Metadata reading doesn't invoke tf_log, but we still register a no-op
+    // to satisfy linker imports (guest declares `tf_log` even if unused).
+    linker
+        .func_wrap(
+            "env",
+            "tf_log",
+            |_caller: Caller<'_, PluginStoreData>, _ptr: i32, _len: i32| {},
+        )
+        .map_err(|e| format!("Linker func_wrap tf_log: {}", e))?;
+
+    // Confirm required exports exist before instantiation
+    let exports: Vec<String> = module.exports().map(|e| e.name().to_string()).collect();
+    for required in ["tf_metadata", "tf_execute"] {
+        if !exports.iter().any(|e| e == required) {
+            return Err(format!(
+                "Missing required export '{}'. Did you forget the `nodes!` macro?",
+                required
+            ));
+        }
+    }
+
     let wasi_ctx = WasiCtxBuilder::new().build_p1();
-    let mut store = Store::new(engine, wasi_ctx);
+    let mut store = Store::new(engine, PluginStoreData::new(wasi_ctx, None));
 
     let instance = linker
         .instantiate(&mut store, module)
@@ -204,13 +279,44 @@ fn read_wasm_metadata(engine: &Engine, module: &Module) -> Result<Vec<PluginNode
     let defs: Vec<PluginNodeDef> =
         serde_json::from_str(&json).map_err(|e| format!("Metadata parse error: {}", e))?;
 
+    // Validate pin data_types
+    const VALID_TYPES: &[&str] = &[
+        "string", "number", "boolean", "object", "array", "unknown", "null",
+    ];
+    for def in &defs {
+        for pin in def.inputs.iter().chain(def.outputs.iter()) {
+            if !VALID_TYPES.contains(&pin.data_type.as_str()) {
+                log::warn!(
+                    "[wasm-plugin] '{}' pin '{}' has unknown data_type '{}' (valid: {})",
+                    def.type_id,
+                    pin.key,
+                    pin.data_type,
+                    VALID_TYPES.join(", ")
+                );
+            }
+        }
+    }
+
     Ok(defs)
+}
+
+/// Validate a .wasm file: instantiate it, verify required exports exist,
+/// and return the declared node metadata. Used by `twistedflow-cli plugin build`
+/// to catch broken plugins before installation.
+pub fn validate_wasm(path: &Path) -> Result<Vec<(String, String)>, String> {
+    let engine = Engine::default();
+    let wasm_bytes =
+        std::fs::read(path).map_err(|e| format!("Failed to read {}: {}", path.display(), e))?;
+    let module =
+        Module::new(&engine, &wasm_bytes).map_err(|e| format!("WASM compile error: {}", e))?;
+    let defs = read_wasm_metadata(&engine, &module)?;
+    Ok(defs.into_iter().map(|d| (d.type_id, d.name)).collect())
 }
 
 /// Read a length-prefixed string from WASM memory.
 /// Format: [u32 LE length][utf-8 bytes]
 fn read_length_prefixed_string(
-    store: &Store<WasiP1Ctx>,
+    store: &Store<PluginStoreData>,
     memory: &Memory,
     ptr: usize,
 ) -> Result<String, String> {

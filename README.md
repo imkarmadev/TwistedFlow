@@ -84,9 +84,17 @@ The desktop app also has a **Build** button in the canvas toolbar that compiles 
 
 ### WASM Plugins
 
-Custom nodes as WebAssembly modules. Write in Rust (or anything that compiles to WASM), drop in your project's `nodes/` folder or `~/.twistedflow/plugins/`.
+Custom nodes written in Rust, compiled to WebAssembly. One command scaffolds, builds, and installs:
 
-A guest SDK (`twistedflow-plugin` crate) makes writing plugins straightforward.
+```bash
+twistedflow plugin new my-plugin --category Utility --node Hello
+cd my-plugin
+twistedflow plugin build
+```
+
+The guest SDK (`twistedflow-plugin` crate) exposes a `nodes!` macro — no manual ABI wiring. Plugins support multi-input/output nodes, typed pins (`string`, `number`, `boolean`, `object`, `array`), and `host::log` callbacks that route into the TwistedFlow console.
+
+See the [plugin author guide](./docs/plugins.md) and [examples](./examples/plugins) (`text-utils`, `json-tools`).
 
 ### Folder-based Projects
 

@@ -173,7 +173,7 @@ async fn main() {{
     }});
 
     let q2 = quiet;
-    let on_log: Box<dyn Fn(LogEntry) + Send + Sync> = Box::new(move |e| {{
+    let on_log: std::sync::Arc<dyn Fn(LogEntry) + Send + Sync> = std::sync::Arc::new(move |e| {{
         if q2 {{ return; }}
         let v = match &e.value {{ Value::String(s) => s.clone(), o => serde_json::to_string_pretty(o).unwrap_or_default() }};
         println!("[{{}}] {{}}", e.label, v);

@@ -18,7 +18,7 @@ pub struct RunFlowOpts {
     pub index: Arc<GraphIndex>,
     pub context: ExecContext,
     pub on_status: Box<dyn Fn(&str, StatusEvent) + Send + Sync>,
-    pub on_log: Box<dyn Fn(LogEntry) + Send + Sync>,
+    pub on_log: Arc<dyn Fn(LogEntry) + Send + Sync>,
     pub cancel: CancellationToken,
     pub http_client: reqwest::Client,
     pub registry: HashMap<&'static str, Box<dyn Node>>,
