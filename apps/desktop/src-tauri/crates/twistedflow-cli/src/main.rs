@@ -183,6 +183,7 @@ async fn run_flow(
         env_headers: None,
         env_vars: if env_map.is_empty() { None } else { Some(env_map) },
         auth: None,
+        variables: None,
     };
 
     // 6. Set up status + log callbacks
