@@ -57,7 +57,7 @@ The heart. Pure async Rust executor with no framework dependency.
 |--------|------|
 | `executor.rs` | DAG walker. Starts at the Start node, follows exec edges, resolves data pins lazily, streams status events. |
 | `graph.rs` | `FlowFile` → `GraphIndex` builder. Indexes nodes/edges for O(1) lookup by ID, exec/data neighbors. |
-| `flow_file.rs` | Deserializes `.flow.json` files into `FlowFile` structs. |
+| `flow_file.rs` | Deserializes `.flow.json` files into `FlowFile` structs (nodes, edges, variables, viewport). |
 | `template.rs` | `#{token}` template parser and renderer. Extracts input pin references from node config strings. |
 | `node.rs` | `Node` trait, `DataType` enum, `ExecContext`, `StatusEvent`, `LogEntry`, pin definitions, registry builder. |
 | `wasm_host.rs` | wasmtime 29 host. Loads `.wasm` plugins from disk, wraps them as `Node` trait objects. |
@@ -118,17 +118,18 @@ Guest SDK for WASM plugin authors. Provides the declarative `nodes!` macro, type
 2. Rust deserializes into `FlowFile`, builds `GraphIndex`
 3. `build_registry()` collects all `#[node]` implementations via `inventory`
 4. WASM plugins loaded from disk, added to registry
-5. Executor finds Start node, marks all nodes as pending
-6. **Chain walking**: follows exec edges sequentially. At each node:
+5. **Variable pre-seeding**: if the flow declares a `variables` array, each variable's default value is written into the runtime variable store before execution begins
+6. Executor finds Start node, marks all nodes as pending
+7. **Chain walking**: follows exec edges sequentially. At each node:
    - Resolve input data pins by walking backward through data edges (lazy — only computed when needed)
    - Call `node.execute(ctx)` from the registry
    - Store outputs in the shared `Outputs` map
    - Emit status event to frontend
    - Follow the next exec edge
-7. **Branching**: If/Else, Match, Try/Catch route to different exec edges based on conditions
-8. **Looping**: ForEach nodes recurse into body sub-chains (sequential or parallel via `tokio::join_all`)
-9. **Events**: EmitEvent finds all OnEvent listeners by name, spawns their chains concurrently
-10. **Process nodes**: Return `NodeResult::Process` — spawned as a separate tokio task that lives until cancellation
+8. **Branching**: If/Else, Match, Try/Catch route to different exec edges based on conditions
+9. **Looping**: ForEach nodes recurse into body sub-chains (sequential or parallel via `tokio::join_all`)
+10. **Events**: EmitEvent finds all OnEvent listeners by name, spawns their chains concurrently
+11. **Process nodes**: Return `NodeResult::Process` — spawned as a separate tokio task that lives until cancellation
 
 ### Data Resolution
 
@@ -171,7 +172,7 @@ Every node declares its pins via `compute*Pins()` functions in `lib/node-pins.ts
 - `direction` — `in` or `out`
 - `dataType` — `string | number | boolean | object | array | unknown`
 
-Schema resolution (`lib/schema-resolution.ts`) walks backward through the graph to introspect pin types at design time — used by BreakObject (auto-generate sub-pins), Convert (filter valid targets), and the palette (filter compatible nodes on pin-drop).
+Schema resolution (`lib/schema-resolution.ts`) walks backward through the graph to introspect pin types at design time — used by BreakObject (auto-generate sub-pins from objects, including Get Variable nodes with declared object types), Convert (filter valid targets), and the palette (filter compatible nodes on pin-drop).
 
 ### Communication with Rust
 
@@ -206,7 +207,7 @@ my-project/
 ```
 
 - **Environments** = `.env` files in standard dotenv format
-- **Flows** = JSON files with nodes array, edges array, and viewport position
+- **Flows** = JSON files with nodes array, edges array, optional `variables` array (typed declarations with defaults), and viewport position
 - **Plugins** = `.wasm` files in `nodes/` (project-scoped) or `~/.twistedflow/plugins/` (global)
 
 ---

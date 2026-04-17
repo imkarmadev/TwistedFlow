@@ -45,8 +45,8 @@ A visual flow engine. Build automations, API clients, HTTP servers, test suites,
 | **Reduce** | Data | Aggregate arrays: sum, count, join, min, max, groupBy. |
 | **Function** | Data | Custom TypeScript transform with typed I/O. |
 | **EnvVar** | Variables | Reads a value from the active .env file. |
-| **SetVariable** | Variables | Sets a runtime variable. |
-| **GetVariable** | Variables | Reads a runtime variable. |
+| **SetVariable** | Variables | Sets a typed runtime variable. Dropdown picker lists declared variables; falls back to freetext. |
+| **GetVariable** | Variables | Reads a typed runtime variable. Output pin colored by declared type. Break Object can introspect the output schema. |
 | **Print** | System | Writes to stdout (useful in CLI/binary mode). |
 | **ShellExec** | System | Runs a shell command and captures output. |
 | **FileRead** | System | Reads a file from disk. |
@@ -122,6 +122,7 @@ my-project/
 - **Right-click** or **Space** to open the searchable node palette
 - **Drag a pin to empty canvas** — palette opens filtered to compatible nodes, auto-wires on selection
 - **Type-aware filtering** — dragging a number pin won't suggest Break Object (which needs an object)
+- **Variables Panel** — click empty canvas to declare flow-level typed variables (name, type, default value). Set/Get Variable nodes show a dropdown of declared variables; pin colors reflect the declared type (string=pink, number=green, boolean=red, object=blue, array=purple). Defaults are pre-seeded at execution start.
 - **Viewport persistence** — zoom/pan position saved per flow
 - **Minimap** — toggle with **M** key
 

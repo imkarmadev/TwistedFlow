@@ -2,6 +2,18 @@
 
 All notable changes to TwistedFlow are documented here.
 
+## [1.4.0] — 2026-04-17
+
+### Added — Flow-Level Typed Variables (UE Blueprint-inspired)
+
+- **Variables Panel** — click empty canvas to open the inspector's variable declarations section. Add, remove, and edit variables with name, type (`string`, `number`, `boolean`, `object`, `array`), and default value.
+- **`variables` array in flow JSON** — each flow can declare typed variables: `[{ name, type, default }]`. Defaults are pre-seeded into the runtime variable store at execution start.
+- **Set/Get Variable dropdown** — when a flow has declared variables, Set Variable and Get Variable nodes show a dropdown picker instead of freetext. Falls back to freetext when no variables are declared.
+- **Typed pin coloring** — variable data pins are colored by declared type: string (pink), number (green), boolean (red), object (blue), array (purple).
+- **Schema resolution for Get Variable** — Break Object can introspect a Get Variable node's output type based on the variable declaration, enabling auto-generated sub-pins.
+
+---
+
 ## [1.3.0] — 2026-04-16
 
 ### Added — WASM Plugin Developer Experience

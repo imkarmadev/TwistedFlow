@@ -1131,7 +1131,7 @@ bun run dev</code></pre>
 
           <div class="node-card">
             <div class="node-card-name">SetVariable</div>
-            <div class="node-card-desc">Sets a runtime variable by name. Variables persist for the duration of the flow run. Use with GetVariable for state that crosses branches.</div>
+            <div class="node-card-desc">Sets a typed runtime variable. When the flow has declared variables (via the Variables Panel), a dropdown picker lists them; otherwise falls back to freetext. The value pin is colored by the variable's declared type.</div>
             <div class="pin-list">
               <span class="pin-tag exec">&rarr; exec-in</span>
               <span class="pin-tag in">value</span>
@@ -1141,10 +1141,14 @@ bun run dev</code></pre>
 
           <div class="node-card">
             <div class="node-card-name">GetVariable</div>
-            <div class="node-card-desc">Reads a runtime variable set by SetVariable. Returns null if the variable hasn't been set yet.</div>
+            <div class="node-card-desc">Reads a typed runtime variable. The output pin is colored by the variable's declared type. Break Object can introspect the output schema when the variable is declared as <code>object</code>, auto-generating sub-pins for each field. Returns the declared default (or null) if the variable hasn't been set yet.</div>
             <div class="pin-list">
               <span class="pin-tag out">value</span>
             </div>
+          </div>
+
+          <div class="callout">
+            <p><strong>Variables Panel:</strong> Click the empty canvas (deselect all nodes) to open the Variables Panel in the inspector. Declare flow-level typed variables with a name, type (<code>string</code>, <code>number</code>, <code>boolean</code>, <code>object</code>, <code>array</code>), and default value. Declared defaults are pre-seeded into the variable store at execution start. Set/Get Variable nodes show a dropdown of declared variables, and pin colors reflect the declared type: string (pink), number (green), boolean (red), object (blue), array (purple).</p>
           </div>
         </div>
 
@@ -1457,6 +1461,7 @@ DEBUG=true</code></pre>
         <ul>
           <li><strong>nodes</strong> &mdash; array of node objects (type, position, config, pins)</li>
           <li><strong>edges</strong> &mdash; array of connections between pins</li>
+          <li><strong>variables</strong> &mdash; array of typed variable declarations (<code>{ name, type, default }</code>). Defaults are pre-seeded at execution start.</li>
           <li><strong>viewport</strong> &mdash; saved zoom/pan position</li>
         </ul>
         <p>Flows are created and edited in the desktop app. You can also export/import them as <code>.flow.json</code> files.</p>
