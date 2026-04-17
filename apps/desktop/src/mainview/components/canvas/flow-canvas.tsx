@@ -1232,6 +1232,17 @@ function collectPinIds(node: Node, variables: FlowVariable[] = []): Set<string> 
     for (const inp of def?.inputs ?? []) ids.add(`in:${inp.key}`);
     for (const out of def?.outputs ?? []) ids.add(`out:${out.key}`);
     return ids;
+  } else if (node.type === "pluginNode") {
+    // WASM plugin nodes: read pin defs from embedded _pluginDef metadata
+    const pluginDef = (node.data as Record<string, unknown>)?._pluginDef as
+      | { inputs?: Array<{ key: string }>; outputs?: Array<{ key: string }> }
+      | undefined;
+    const ids = new Set<string>();
+    ids.add("exec-in");
+    ids.add("exec-out");
+    for (const inp of pluginDef?.inputs ?? []) ids.add(`in:${inp.key}`);
+    for (const out of pluginDef?.outputs ?? []) ids.add(`out:${out.key}`);
+    return ids;
   } else pins = { inputs: [], outputs: [] };
   return new Set([...pins.inputs.map((p) => p.id), ...pins.outputs.map((p) => p.id)]);
 }
