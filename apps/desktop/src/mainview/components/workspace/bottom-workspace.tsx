@@ -34,6 +34,11 @@ interface CustomNodeAsset {
   error?: string | null;
 }
 
+interface CustomNodeOpenTarget {
+  id: string;
+  label: string;
+}
+
 interface BottomWorkspaceProps {
   projectPath: string;
   activeFlowFilename: string | null;
@@ -54,6 +59,8 @@ const TABS: Array<{ id: BottomWorkspaceTabId; label: string }> = [
   { id: "problems", label: "Problems" },
 ];
 
+const CUSTOM_NODE_OPEN_TARGET_STORAGE_KEY = "twistedflow.customNodeOpenTarget";
+
 export function BottomWorkspace({
   projectPath,
   activeFlowFilename,
@@ -68,6 +75,7 @@ export function BottomWorkspace({
   const { entries, isOpen: consoleOpen, open: openConsole, close: closeConsole, clear } = useConsole();
   const [flows, setFlows] = useState<FlowItem[]>([]);
   const [customNodes, setCustomNodes] = useState<CustomNodeAsset[]>([]);
+  const [openTargets, setOpenTargets] = useState<CustomNodeOpenTarget[]>([]);
   const [loadingFlows, setLoadingFlows] = useState(false);
   const [loadingCustomNodes, setLoadingCustomNodes] = useState(false);
 
@@ -83,6 +91,14 @@ export function BottomWorkspace({
   } | null>(null);
   const [creatingCustomNode, setCreatingCustomNode] = useState(false);
   const [busyCustomNodeId, setBusyCustomNodeId] = useState<string | null>(null);
+  const [preferredOpenTargetId, setPreferredOpenTargetId] = useState<string>(() => {
+    try {
+      return window.localStorage.getItem(CUSTOM_NODE_OPEN_TARGET_STORAGE_KEY) ?? "";
+    } catch {
+      return "";
+    }
+  });
+  const [openTargetMenuFor, setOpenTargetMenuFor] = useState<string | null>(null);
 
   const loadFlows = useCallback(async () => {
     setLoadingFlows(true);
@@ -110,6 +126,16 @@ export function BottomWorkspace({
     }
   }, [projectPath]);
 
+  const loadOpenTargets = useCallback(async () => {
+    try {
+      const next = await invoke<CustomNodeOpenTarget[]>("list_custom_node_open_targets");
+      setOpenTargets(next);
+    } catch (err) {
+      console.error("[invoke list_custom_node_open_targets]", err);
+      setOpenTargets([{ id: "default", label: "System Default" }]);
+    }
+  }, []);
+
   useEffect(() => {
     void loadFlows();
   }, [loadFlows, activeFlowFilename]);
@@ -122,6 +148,45 @@ export function BottomWorkspace({
     if (activeTab !== "customNodes") return;
     void loadCustomNodes();
   }, [activeTab, loadCustomNodes]);
+
+  useEffect(() => {
+    if (activeTab !== "customNodes") return;
+    void loadOpenTargets();
+  }, [activeTab, loadOpenTargets]);
+
+  useEffect(() => {
+    if (openTargets.length === 0) return;
+    if (openTargets.some((target) => target.id === preferredOpenTargetId)) return;
+    const fallback =
+      openTargets.find((target) => target.id !== "default")?.id ??
+      openTargets[0]?.id ??
+      "default";
+    setPreferredOpenTargetId(fallback);
+  }, [openTargets, preferredOpenTargetId]);
+
+  useEffect(() => {
+    if (!preferredOpenTargetId) return;
+    try {
+      window.localStorage.setItem(CUSTOM_NODE_OPEN_TARGET_STORAGE_KEY, preferredOpenTargetId);
+    } catch {
+      // Ignore storage failures; the picker still works for this session.
+    }
+  }, [preferredOpenTargetId]);
+
+  useEffect(() => {
+    if (!openTargetMenuFor) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('[data-open-target-wrap="true"]')) return;
+      setOpenTargetMenuFor(null);
+    };
+    window.addEventListener("pointerdown", onPointerDown);
+    return () => window.removeEventListener("pointerdown", onPointerDown);
+  }, [openTargetMenuFor]);
+
+  useEffect(() => {
+    setOpenTargetMenuFor(null);
+  }, [activeTab, projectPath]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -171,6 +236,15 @@ export function BottomWorkspace({
       problems: problemEntries.length,
     }),
     [customNodes.length, mainFlows.length, problemEntries.length, subflows.length, unreadConsoleCount],
+  );
+
+  const preferredOpenTarget = useMemo(
+    () =>
+      openTargets.find((target) => target.id === preferredOpenTargetId) ??
+      openTargets.find((target) => target.id !== "default") ??
+      openTargets[0] ??
+      null,
+    [openTargets, preferredOpenTargetId],
   );
 
   const handleTabClick = useCallback(
@@ -252,22 +326,43 @@ export function BottomWorkspace({
       setCustomNodeDraftOpen(false);
       setCustomNodeDraftName("");
       setCustomNodeFeedback({ kind: "ok", message: `Created source: ${sourcePath}` });
-      await invoke("open_custom_node_source", { sourcePath });
+      const targetId = preferredOpenTarget?.id ?? "default";
+      if (targetId === "default") {
+        await invoke("open_custom_node_source", { sourcePath });
+      } else {
+        await invoke("open_custom_node_source_with", { sourcePath, targetId });
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setCustomNodeFeedback({ kind: "error", message });
     } finally {
       setCreatingCustomNode(false);
     }
-  }, [customNodeDraftName, loadCustomNodes, projectPath]);
+  }, [customNodeDraftName, loadCustomNodes, preferredOpenTarget, projectPath]);
 
-  const handleOpenCustomNodeSource = useCallback(async (sourcePath: string) => {
+  const handleOpenCustomNodeSource = useCallback(async (
+    sourcePath: string,
+    targetId = "default",
+    rememberTarget = false,
+  ) => {
     try {
-      await invoke("open_custom_node_source", { sourcePath });
+      if (targetId === "default") {
+        await invoke("open_custom_node_source", { sourcePath });
+      } else {
+        await invoke("open_custom_node_source_with", { sourcePath, targetId });
+      }
+      if (rememberTarget) {
+        setPreferredOpenTargetId(targetId);
+      }
+      setOpenTargetMenuFor(null);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setCustomNodeFeedback({ kind: "error", message });
     }
+  }, []);
+
+  const toggleOpenTargetMenu = useCallback((assetId: string) => {
+    setOpenTargetMenuFor((current) => (current === assetId ? null : assetId));
   }, []);
 
   const handleBuildCustomNode = useCallback(
@@ -354,6 +449,9 @@ export function BottomWorkspace({
           {activeTab === "customNodes" && (
             <CustomNodesTab
               assets={customNodes}
+              openTargets={openTargets}
+              preferredOpenTarget={preferredOpenTarget}
+              openTargetMenuFor={openTargetMenuFor}
               loading={loadingCustomNodes}
               busyNodeId={busyCustomNodeId}
               draftOpen={customNodeDraftOpen}
@@ -366,9 +464,10 @@ export function BottomWorkspace({
               onDraftSubmit={() => {
                 void submitCustomNodeDraft();
               }}
-              onOpenSource={(sourcePath) => {
-                void handleOpenCustomNodeSource(sourcePath);
+              onOpenSource={(sourcePath, targetId, rememberTarget) => {
+                void handleOpenCustomNodeSource(sourcePath, targetId, rememberTarget);
               }}
+              onToggleOpenTargetMenu={toggleOpenTargetMenu}
               onBuild={(asset) => {
                 void handleBuildCustomNode(asset);
               }}
@@ -653,6 +752,9 @@ function FlowListTab({
 
 function CustomNodesTab({
   assets,
+  openTargets,
+  preferredOpenTarget,
+  openTargetMenuFor,
   loading,
   busyNodeId,
   draftOpen,
@@ -664,10 +766,14 @@ function CustomNodesTab({
   onDraftChange,
   onDraftSubmit,
   onOpenSource,
+  onToggleOpenTargetMenu,
   onBuild,
   onReload,
 }: {
   assets: CustomNodeAsset[];
+  openTargets: CustomNodeOpenTarget[];
+  preferredOpenTarget: CustomNodeOpenTarget | null;
+  openTargetMenuFor: string | null;
   loading: boolean;
   busyNodeId: string | null;
   draftOpen: boolean;
@@ -678,7 +784,8 @@ function CustomNodesTab({
   onDraftCancel: () => void;
   onDraftChange: (value: string) => void;
   onDraftSubmit: () => void;
-  onOpenSource: (sourcePath: string) => void;
+  onOpenSource: (sourcePath: string, targetId?: string, rememberTarget?: boolean) => void;
+  onToggleOpenTargetMenu: (assetId: string) => void;
   onBuild: (asset: CustomNodeAsset) => void;
   onReload: () => void;
 }) {
@@ -779,6 +886,27 @@ function CustomNodesTab({
                     disabled={busyNodeId === asset.id}
                     onClick={() => onBuild(asset)}
                   />
+                )}
+                {asset.sourcePath && preferredOpenTarget && (
+                  <CardSplitButton
+                    label={preferredOpenTarget.label}
+                    menuOpen={openTargetMenuFor === asset.id}
+                    onClick={() => onOpenSource(asset.sourcePath!, preferredOpenTarget.id, true)}
+                    onToggleMenu={() => onToggleOpenTargetMenu(asset.id)}
+                  >
+                    {openTargets.map((target) => (
+                      <button
+                        key={target.id}
+                        type="button"
+                        className={`${s.openMenuItem} ${
+                          target.id === preferredOpenTarget.id ? s.openMenuItemActive : ""
+                        }`}
+                        onClick={() => onOpenSource(asset.sourcePath!, target.id, true)}
+                      >
+                        {target.label}
+                      </button>
+                    ))}
+                  </CardSplitButton>
                 )}
               </div>
 
@@ -946,6 +1074,48 @@ function CardButton({
     >
       {label}
     </button>
+  );
+}
+
+function CardSplitButton({
+  label,
+  menuOpen,
+  onClick,
+  onToggleMenu,
+  children,
+}: {
+  label: string;
+  menuOpen: boolean;
+  onClick: () => void;
+  onToggleMenu: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <div className={s.openTargetWrap} data-open-target-wrap="true">
+      <div className={s.openTargetGroup}>
+        <button
+          type="button"
+          className={`${s.cardButton} ${s.openTargetLabel}`}
+          onClick={onClick}
+        >
+          {label}
+        </button>
+        <button
+          type="button"
+          className={`${s.cardButton} ${s.openTargetChevron}`}
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+          onClick={onToggleMenu}
+        >
+          <span className={s.openTargetChevronGlyph} aria-hidden="true" />
+        </button>
+      </div>
+      {menuOpen && (
+        <div className={s.openMenu} role="menu">
+          {children}
+        </div>
+      )}
+    </div>
   );
 }
 

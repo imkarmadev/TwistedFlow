@@ -291,8 +291,8 @@
 }
 
 .nodeCard {
-  min-height: 148px;
-  padding: 12px;
+  min-height: 264px;
+  padding: 12px 12px 36px;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -369,21 +369,118 @@
 }
 
 .cardActions {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
   gap: 8px;
-  margin-top: auto;
+  margin-top: 12px;
+}
+
+.cardActions > * {
+  min-width: 0;
+}
+
+.cardActions > .cardButton {
+  width: 100%;
+}
+
+.openTargetWrap {
+  position: relative;
+  grid-column: 1 / -1;
+}
+
+.openTargetGroup {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
+}
+
+.openTargetLabel {
+  width: 100%;
+  justify-content: flex-start;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.openTargetChevron {
+  min-width: 28px;
+  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.openTargetChevronGlyph {
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid currentColor;
+}
+
+.openMenu {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 6px);
+  min-width: 180px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: rgba(31, 38, 58, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 10px 24px rgba(0, 0, 0, 0.35);
+  z-index: 5;
+}
+
+.openMenuItem {
+  min-height: 28px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.openMenuItem:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
+}
+
+.openMenuItemActive {
+  background: rgba(76, 194, 255, 0.12);
+  color: var(--accent);
 }
 
 .cardButton {
   height: 28px;
   padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: rgba(255, 255, 255, 0.05);
   color: var(--text-secondary);
   border: none;
   border-radius: 4px;
   font-family: inherit;
   font-size: 11px;
+  white-space: nowrap;
   cursor: pointer;
 }
 

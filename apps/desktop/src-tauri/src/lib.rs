@@ -123,7 +123,9 @@ pub fn run() {
             project::create_environment,
             project::delete_environment,
             custom_nodes::create_custom_node_source,
+            custom_nodes::list_custom_node_open_targets,
             custom_nodes::open_custom_node_source,
+            custom_nodes::open_custom_node_source_with,
             custom_nodes::build_custom_node,
             // HTTP
             http::http_request,
