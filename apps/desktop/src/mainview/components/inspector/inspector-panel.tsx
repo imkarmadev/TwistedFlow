@@ -14,6 +14,7 @@ import { evalZodSchema } from "../../lib/eval-schema";
 import { copyCurlToClipboard } from "../../lib/copy-curl";
 import type { Environment } from "../../use-tauri";
 import type { FlowVariable } from "../../lib/variables-context";
+import type { Interface, PinDecl, PinType } from "../../lib/flow-interface-context";
 import { JsonToZodModal } from "./json-to-zod-modal";
 import s from "./inspector-panel.module.css";
 
@@ -43,6 +44,10 @@ interface InspectorPanelProps {
   flowVariables?: FlowVariable[];
   /** Update the flow's variable declarations. */
   onFlowVariablesChange?: (vars: FlowVariable[]) => void;
+  /** Subflow I/O contract (null for main flows). */
+  flowInterface?: Interface | null;
+  /** Update the subflow's interface. */
+  onFlowInterfaceChange?: (iface: Interface) => void;
 }
 
 export function InspectorPanel({
@@ -56,6 +61,8 @@ export function InspectorPanel({
   getInputType,
   flowVariables,
   onFlowVariablesChange,
+  flowInterface,
+  onFlowInterfaceChange,
 }: InspectorPanelProps) {
   if (!node) {
     return (
@@ -92,7 +99,12 @@ export function InspectorPanel({
       </div>
 
       <div className={s.body}>
-        {node.type === "httpRequest" ? (
+        {(node.type === "subflowInputs" || node.type === "subflowOutputs") && flowInterface && onFlowInterfaceChange ? (
+          <InterfacePanel
+            interface={flowInterface}
+            onChange={onFlowInterfaceChange}
+          />
+        ) : node.type === "httpRequest" ? (
           <>
             <HttpRequestEditor
               data={(node.data ?? {}) as Record<string, unknown>}
@@ -472,6 +484,122 @@ function VariablesPanel({ variables, onChange }: VariablesPanelProps) {
           and schema resolution. Defaults are pre-seeded at execution start.
         </div>
       </div>
+    </div>
+  );
+}
+
+// ─── Interface Panel (subflow I/O editor) ──────────────────────
+
+const PIN_TYPES: Array<{ value: PinType; label: string }> = [
+  { value: "exec", label: "exec" },
+  { value: "string", label: "string" },
+  { value: "number", label: "number" },
+  { value: "boolean", label: "boolean" },
+  { value: "object", label: "object" },
+  { value: "array", label: "array" },
+];
+
+interface InterfacePanelProps {
+  interface: Interface;
+  onChange: (iface: Interface) => void;
+}
+
+function InterfacePanel({ interface: iface, onChange }: InterfacePanelProps) {
+  const updateSide = (side: "inputs" | "outputs", pins: PinDecl[]) =>
+    onChange({ ...iface, [side]: pins });
+
+  return (
+    <div className={s.form}>
+      <SidePins
+        side="inputs"
+        pins={iface.inputs}
+        onChange={(p) => updateSide("inputs", p)}
+      />
+      <SidePins
+        side="outputs"
+        pins={iface.outputs}
+        onChange={(p) => updateSide("outputs", p)}
+      />
+      <div className={s.schemaHint}>
+        Callers see this subflow as a palette node. Inputs become pins on the
+        left of the call site; Outputs become pins on the right. Exec-typed
+        outputs become branches — each Outputs node on the canvas can route
+        to a different one via its `branch` config.
+      </div>
+    </div>
+  );
+}
+
+interface SidePinsProps {
+  side: "inputs" | "outputs";
+  pins: PinDecl[];
+  onChange: (pins: PinDecl[]) => void;
+}
+
+function SidePins({ side, pins, onChange }: SidePinsProps) {
+  const hasExec = pins.some((p) => p.type === "exec");
+  // Inputs: strictly 0 or 1 exec pin (pure-function entry).
+  // Outputs: 0..N exec pins allowed — each is a branch the caller routes.
+  const capExec = side === "inputs";
+
+  const add = () => {
+    const base = side === "inputs" ? "input" : "output";
+    let key = base;
+    let i = 1;
+    while (pins.some((p) => p.key === key)) {
+      key = `${base}${i++}`;
+    }
+    // Default new pins to exec only if the side is uncapped OR has no exec yet.
+    const defaultType = (capExec && hasExec) ? "string" : "exec";
+    onChange([...pins, { key, type: defaultType }]);
+  };
+  const remove = (i: number) => onChange(pins.filter((_, idx) => idx !== i));
+  const update = (i: number, patch: Partial<PinDecl>) =>
+    onChange(pins.map((p, idx) => (idx === i ? { ...p, ...patch } : p)));
+
+  return (
+    <div className={s.field}>
+      <div className={s.labelRow}>
+        <label className={s.label}>{side === "inputs" ? "Inputs" : "Outputs"}</label>
+        <button className={s.smallBtn} onClick={add}>+ add</button>
+      </div>
+      {pins.length === 0 && (
+        <div className={s.subtleHint}>
+          {side === "inputs"
+            ? "No inputs declared. Add pins the caller passes to this subflow."
+            : "No outputs declared. Add pins returned from this subflow."}
+        </div>
+      )}
+      {pins.map((p, i) => {
+        // Inputs side caps exec at 1 → hide "exec" from the dropdown when
+        // another pin already uses it. Outputs side permits multiple exec
+        // pins (each is a named return branch).
+        const availableTypes = PIN_TYPES.filter(
+          (t) => t.value !== "exec" || p.type === "exec" || !capExec || !hasExec,
+        );
+        return (
+          <div key={i} className={s.headerRow} style={{ marginBottom: 4 }}>
+            <input
+              className={s.input}
+              value={p.key}
+              onChange={(e) => update(i, { key: e.target.value })}
+              placeholder="key"
+              spellCheck={false}
+            />
+            <select
+              className={s.input}
+              style={{ flex: "0 0 90px" }}
+              value={p.type}
+              onChange={(e) => update(i, { type: e.target.value as PinType })}
+            >
+              {availableTypes.map((t) => (
+                <option key={t.value} value={t.value}>{t.label}</option>
+              ))}
+            </select>
+            <button className={s.removeBtn} onClick={() => remove(i)}>×</button>
+          </div>
+        );
+      })}
     </div>
   );
 }

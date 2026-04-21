@@ -41,6 +41,8 @@ import { RouteNode } from "../components/canvas/nodes/route-node";
 import { CorsNode } from "../components/canvas/nodes/cors-node";
 import { VerifyAuthNode } from "../components/canvas/nodes/verify-auth-node";
 import { RateLimitNode } from "../components/canvas/nodes/rate-limit-node";
+import { SubflowInputsNode } from "../components/canvas/nodes/subflow-inputs-node";
+import { SubflowOutputsNode } from "../components/canvas/nodes/subflow-outputs-node";
 
 export type NodeCategory =
   | "Flow Control"
@@ -52,7 +54,8 @@ export type NodeCategory =
   | "CLI"
   | "String"
   | "System"
-  | "Testing";
+  | "Testing"
+  | "Subflow";
 
 export interface NodeTypeDef {
   /** Internal type id, persisted to SQLite as `kind`. */
@@ -99,6 +102,12 @@ export interface NodeTypeDef {
    * sense (e.g. Start). The palette filters it out when one already exists.
    */
   singleton?: boolean;
+
+  /**
+   * If true, this node does not appear in the palette. Used for internal
+   * node kinds that are only placed programmatically (e.g. subflow I/O).
+   */
+  hidden?: boolean;
 }
 
 export const NODE_REGISTRY: NodeTypeDef[] = [
@@ -883,6 +892,38 @@ export const NODE_REGISTRY: NodeTypeDef[] = [
     hasDataOut: true,
     defaultExecInPin: "exec-in",
     defaultData: () => ({ maxRetries: 3, delayMs: 1000, backoffMultiplier: 2.0 }),
+  },
+  // ── Subflow I/O (hidden from palette — placed only by create_subflow) ─
+  {
+    type: "subflowInputs",
+    label: "Inputs",
+    category: "Subflow",
+    description: "Subflow entry — exposes the declared input pins.",
+    component: SubflowInputsNode,
+    hasExecIn: false,
+    hasExecOut: true,
+    hasDataIn: false,
+    hasDataOut: true,
+    defaultData: () => ({}),
+    singleton: true,
+    hidden: true,
+  },
+  {
+    type: "subflowOutputs",
+    label: "Outputs",
+    category: "Subflow",
+    description: "Subflow return — collect values, select which exec branch fires on the caller.",
+    component: SubflowOutputsNode,
+    hasExecIn: true,
+    hasExecOut: false,
+    hasDataIn: true,
+    hasDataOut: false,
+    defaultExecInPin: "exec-in",
+    acceptsDataInput: () => true,
+    defaultData: () => ({ branch: "" }),
+    // Unhidden so users can drop additional Outputs nodes for multi-branch
+    // subflows (one node per declared exec output). The Inputs node stays
+    // hidden — only one is ever valid per subflow.
   },
 ];
 

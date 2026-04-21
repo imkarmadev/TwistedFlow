@@ -410,3 +410,68 @@
   color: var(--text-muted);
   flex-shrink: 0;
 }
+
+/* ── Accordion header (Flows / Subflows) ───────────────────────────────── */
+.accordionHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px 6px 10px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.accordionHeader:hover {
+  color: var(--text-secondary);
+}
+
+.accordionChevron {
+  display: inline-block;
+  width: 10px;
+  font-size: 9px;
+  color: var(--text-muted);
+}
+
+.accordionLabel {
+  flex: 1;
+  text-align: left;
+}
+
+.accordionCount {
+  font-size: 10px;
+  color: var(--text-muted);
+  background: var(--glass);
+  padding: 1px 6px;
+  border-radius: 8px;
+  letter-spacing: 0;
+  font-weight: 500;
+}
+
+.accordionAdd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-left: 2px;
+  border-radius: 4px;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.accordionAdd:hover {
+  background: var(--glass-hover);
+  color: var(--accent);
+}

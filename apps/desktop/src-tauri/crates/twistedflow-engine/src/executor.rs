@@ -21,10 +21,14 @@ pub struct RunFlowOpts {
     pub on_log: Arc<dyn Fn(LogEntry) + Send + Sync>,
     pub cancel: CancellationToken,
     pub http_client: reqwest::Client,
-    pub registry: HashMap<&'static str, Box<dyn Node>>,
+    /// Arc-wrapped so nested subflow runs can share it cheaply.
+    pub registry: Arc<HashMap<String, Box<dyn Node>>>,
     /// Process tasks spawned by process nodes. Separate from bg_tasks —
     /// these run until cancelled, not until the chain completes.
     pub processes: Arc<Mutex<Vec<tokio::task::JoinHandle<()>>>>,
+    /// Subflow recursion depth. Top-level flow = 0. Guard against runaway
+    /// recursion via MAX_SUBFLOW_DEPTH in subflow.rs.
+    pub depth: u32,
 }
 
 /// Run a flow end-to-end. Resolves when execution completes.
@@ -200,6 +204,21 @@ pub fn run_chain(
             }
         }
 
+        // Same translation for subflow call nodes: React Flow type is
+        // "subflowCall" but the registered subflow type_id lives in
+        // data._subflowDef.typeId (format: "fn:<name>").
+        let subflow_type_id;
+        if node_type == "subflowCall" {
+            if let Some(type_id) = node.data
+                .get("_subflowDef")
+                .and_then(|d| d.get("typeId"))
+                .and_then(|v| v.as_str())
+            {
+                subflow_type_id = type_id.to_string();
+                node_type = &subflow_type_id;
+            }
+        }
+
         // Dispatch to registered node implementation
         if let Some(node_impl) = opts.registry.get(node_type) {
             let ctx = NodeCtx {
@@ -307,6 +326,19 @@ pub fn resolve_pin_value<'a>(
         }
     }
 
+    // Same for subflow call nodes
+    let subflow_type_id;
+    if node_type == "subflowCall" {
+        if let Some(type_id) = source_node.data
+            .get("_subflowDef")
+            .and_then(|d| d.get("typeId"))
+            .and_then(|v| v.as_str())
+        {
+            subflow_type_id = type_id.to_string();
+            node_type = &subflow_type_id;
+        }
+    }
+
     // Dispatch to registered data node implementation
     if let Some(node_impl) = opts.registry.get(node_type) {
         // Create a fake bg_tasks for the context (data nodes don't spawn tasks)
@@ -331,6 +363,18 @@ pub fn resolve_pin_value<'a>(
                         return map.get(source_pin).cloned();
                     }
                     return None;
+                }
+                // If the node populated its outputs cache (most data nodes
+                // do via ctx.set_outputs), return the specific pin the caller
+                // asked for. Otherwise fall back to the raw NodeResult::Data
+                // value for legacy single-output data nodes.
+                {
+                    let out = outputs.lock().await;
+                    if let Some(node_out) = out.get(source_id) {
+                        if let Some(val) = node_out.get(source_pin) {
+                            return Some(val.clone());
+                        }
+                    }
                 }
                 value
             }

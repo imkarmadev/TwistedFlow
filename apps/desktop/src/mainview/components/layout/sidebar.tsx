@@ -7,6 +7,37 @@ import s from "./sidebar.module.css";
 interface FlowItem {
   name: string;
   filename: string;
+  /** "main" (default) or "subflow" — drives accordion bucket. */
+  kind?: string;
+}
+
+type CreateMode = null | "flow" | "subflow";
+
+const ACCORDION_KEY = "twistedflow:sidebarSections";
+
+interface AccordionState {
+  flows: boolean;
+  subflows: boolean;
+}
+
+function getAccordion(): AccordionState {
+  try {
+    const raw = localStorage.getItem(ACCORDION_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as Partial<AccordionState>;
+      return {
+        flows: parsed.flows ?? true,
+        subflows: parsed.subflows ?? true,
+      };
+    }
+  } catch {
+    /* fall through */
+  }
+  return { flows: true, subflows: true };
+}
+
+function setAccordion(state: AccordionState) {
+  localStorage.setItem(ACCORDION_KEY, JSON.stringify(state));
 }
 
 interface SidebarProps {
@@ -63,12 +94,19 @@ export function Sidebar({
   onOpenSettings,
 }: SidebarProps) {
   const [flows, setFlows] = useState<FlowItem[]>([]);
-  const [creatingFlow, setCreatingFlow] = useState(false);
+  const [creating, setCreating] = useState<CreateMode>(null);
   const [draft, setDraft] = useState("");
   const [confirmDeleteFlow, setConfirmDeleteFlow] = useState<string | null>(null);
   const [recents, setRecents] = useState<RecentProject[]>(getRecents);
   const [showCreateName, setShowCreateName] = useState(false);
   const [createName, setCreateName] = useState("");
+  const [accordion, setAccordionState] = useState<AccordionState>(getAccordion);
+
+  const toggleAccordion = (key: keyof AccordionState) => {
+    const next = { ...accordion, [key]: !accordion[key] };
+    setAccordionState(next);
+    setAccordion(next);
+  };
 
   // Track recent when project opens
   useEffect(() => {
@@ -127,18 +165,20 @@ export function Sidebar({
 
   const submitNewFlow = async () => {
     const name = draft.trim();
-    setCreatingFlow(false);
+    const mode = creating;
+    setCreating(null);
     setDraft("");
-    if (!name || !activeProjectPath) return;
+    if (!name || !activeProjectPath || !mode) return;
+    const cmd = mode === "subflow" ? "create_subflow" : "create_flow";
     try {
-      const created = await invoke<{ filename: string }>("create_flow", {
+      const created = await invoke<{ filename: string }>(cmd, {
         projectPath: activeProjectPath,
         name,
       });
       refreshFlows();
       onSelectFlow(created.filename);
     } catch (e) {
-      console.error("create_flow", e);
+      console.error(cmd, e);
     }
   };
 
@@ -244,75 +284,128 @@ export function Sidebar({
         </>
       )}
 
-      {/* Flows section */}
-      {activeProjectPath && (
-        <>
-          <div className={s.divider} />
-          <div className={s.sectionLabel}>Flows</div>
+      {/* Flows + Subflows accordion sections */}
+      {activeProjectPath && (() => {
+        const mainFlows = flows.filter((f) => (f.kind ?? "main") === "main");
+        const subflows = flows.filter((f) => f.kind === "subflow");
 
-          <div className={s.list}>
-            {flows.length === 0 && !creatingFlow && (
-              <div className={s.emptyHint}>No flows yet.</div>
-            )}
-
-            {flows.map((f) => (
-              <div key={f.filename} className={s.flowRow}>
-                <button
-                  className={clsx(s.flowItem, f.filename === activeFlowFilename && s.flowItemActive)}
-                  onClick={() => onSelectFlow(f.filename)}
-                >
-                  {runningFlows.has(f.filename) && <span className={s.runningDot} />}
-                  {f.name}
-                </button>
-                <div className={s.flowIcons}>
-                  <span
-                    className={clsx(s.flowIcon, confirmDeleteFlow === f.filename && s.flowIconDanger)}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (confirmDeleteFlow !== f.filename) {
-                        setConfirmDeleteFlow(f.filename);
-                        setTimeout(() => setConfirmDeleteFlow(null), 3000);
-                        return;
-                      }
-                      void deleteFlow(f.filename);
-                    }}
-                    title={confirmDeleteFlow === f.filename ? "Click again to confirm" : "Delete flow"}
-                  >
-                    {confirmDeleteFlow === f.filename ? "!" : "×"}
-                  </span>
-                </div>
-              </div>
-            ))}
-
-            {creatingFlow && (
-              <input
-                autoFocus
-                className={s.input}
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                onBlur={() => void submitNewFlow()}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") void submitNewFlow();
-                  if (e.key === "Escape") {
-                    setDraft("");
-                    setCreatingFlow(false);
+        const renderFlowRow = (f: FlowItem) => (
+          <div key={f.filename} className={s.flowRow}>
+            <button
+              className={clsx(s.flowItem, f.filename === activeFlowFilename && s.flowItemActive)}
+              onClick={() => onSelectFlow(f.filename)}
+            >
+              {runningFlows.has(f.filename) && <span className={s.runningDot} />}
+              {f.name}
+            </button>
+            <div className={s.flowIcons}>
+              <span
+                className={clsx(s.flowIcon, confirmDeleteFlow === f.filename && s.flowIconDanger)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (confirmDeleteFlow !== f.filename) {
+                    setConfirmDeleteFlow(f.filename);
+                    setTimeout(() => setConfirmDeleteFlow(null), 3000);
+                    return;
                   }
+                  void deleteFlow(f.filename);
                 }}
-                placeholder="Flow name"
-              />
+                title={confirmDeleteFlow === f.filename ? "Click again to confirm" : "Delete flow"}
+              >
+                {confirmDeleteFlow === f.filename ? "!" : "×"}
+              </span>
+            </div>
+          </div>
+        );
+
+        const draftInput = (
+          <input
+            autoFocus
+            className={s.input}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={() => void submitNewFlow()}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") void submitNewFlow();
+              if (e.key === "Escape") {
+                setDraft("");
+                setCreating(null);
+              }
+            }}
+            placeholder={creating === "subflow" ? "Subflow name" : "Flow name"}
+          />
+        );
+
+        return (
+          <>
+            <div className={s.divider} />
+
+            {/* ── Flows section ─────────────────────────────────── */}
+            <button
+              className={s.accordionHeader}
+              onClick={() => toggleAccordion("flows")}
+            >
+              <span className={s.accordionChevron}>{accordion.flows ? "▾" : "▸"}</span>
+              <span className={s.accordionLabel}>Flows</span>
+              <span className={s.accordionCount}>{mainFlows.length}</span>
+              <span
+                className={s.accordionAdd}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (!accordion.flows) toggleAccordion("flows");
+                  setCreating("flow");
+                  setDraft("");
+                }}
+                title="New flow"
+              >
+                +
+              </span>
+            </button>
+
+            {accordion.flows && (
+              <div className={s.list}>
+                {mainFlows.length === 0 && creating !== "flow" && (
+                  <div className={s.emptyHint}>No flows yet.</div>
+                )}
+                {mainFlows.map(renderFlowRow)}
+                {creating === "flow" && draftInput}
+              </div>
             )}
 
-            {!creatingFlow && (
-              <button
-                className={s.addFlow}
-                onClick={() => { setCreatingFlow(true); setDraft(""); }}
+            {/* ── Subflows section ──────────────────────────────── */}
+            <button
+              className={s.accordionHeader}
+              onClick={() => toggleAccordion("subflows")}
+            >
+              <span className={s.accordionChevron}>{accordion.subflows ? "▾" : "▸"}</span>
+              <span className={s.accordionLabel}>Subflows</span>
+              <span className={s.accordionCount}>{subflows.length}</span>
+              <span
+                className={s.accordionAdd}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (!accordion.subflows) toggleAccordion("subflows");
+                  setCreating("subflow");
+                  setDraft("");
+                }}
+                title="New subflow"
               >
-                + new flow
-              </button>
+                +
+              </span>
+            </button>
+
+            {accordion.subflows && (
+              <div className={s.list}>
+                {subflows.length === 0 && creating !== "subflow" && (
+                  <div className={s.emptyHint}>No subflows yet.</div>
+                )}
+                {subflows.map(renderFlowRow)}
+                {creating === "subflow" && draftInput}
+              </div>
             )}
-          </div>
-        </>
-      )}
+          </>
+        );
+      })()}
     </aside>
   );
 }

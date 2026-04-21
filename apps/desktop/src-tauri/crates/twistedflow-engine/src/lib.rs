@@ -7,6 +7,7 @@ pub mod executor;
 pub mod flow_file;
 pub mod graph;
 pub mod node;
+pub mod subflow;
 pub mod template;
 pub mod wasm_host;
 
@@ -17,6 +18,7 @@ pub use node::{
     Node, NodeCtx, NodeMeta, NodeMetadata, NodeRegistration, NodeResult, NodeStatus, PinDef,
     Outputs, StatusEvent, TapLogs, VariableDecl, all_node_metadata, build_registry,
 };
-pub use flow_file::FlowFile;
+pub use flow_file::{FlowFile, FlowKind, Interface, PinDecl};
+pub use subflow::{call_subflow, load_subflows, SubflowNode, SubflowReturn, MAX_SUBFLOW_DEPTH};
 pub use template::{input_pins_for, render_template};
 pub use wasm_host::{load_wasm_plugins, validate_wasm, DEFAULT_PLUGINS_DIR};

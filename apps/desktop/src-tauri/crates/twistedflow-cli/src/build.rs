@@ -109,9 +109,21 @@ reqwest = {{ version = "0.12", default-features = false, features = ["rustls-tls
 
     std::fs::write(build_dir.join("Cargo.toml"), cargo_toml).map_err(|e| e.to_string())?;
 
+    // Collect subflow sources (kind=subflow files) — bundled into the binary.
+    let mut subflow_sources: Vec<String> = Vec::new();
+    for (_, src) in &available_flows {
+        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(src) {
+            if parsed.get("kind").and_then(|v| v.as_str()) == Some("subflow") {
+                subflow_sources.push(src.clone());
+            }
+        }
+    }
+    let subflows_json = serde_json::to_string(&subflow_sources).unwrap_or_else(|_| "[]".into());
+
     // main.rs — baked in, just runs
     let escaped_flow = flow_json.replace('\\', "\\\\").replace('"', "\\\"").replace('\n', "\\n");
     let escaped_env = env_content.replace('\\', "\\\\").replace('"', "\\\"").replace('\n', "\\n");
+    let escaped_subflows = subflows_json.replace('\\', "\\\\").replace('"', "\\\"").replace('\n', "\\n");
 
     let main_rs = format!(
 r##"//! Built by `twistedflow build`. Flow: {flow_name}, Env: {env_name}
@@ -121,13 +133,15 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 use twistedflow_engine::{{
-    FlowFile, GraphIndex, LogEntry, RunFlowOpts, StatusEvent,
+    FlowFile, FlowKind, GraphIndex, LogEntry, RunFlowOpts, StatusEvent, SubflowNode,
     build_registry, load_wasm_plugins, DEFAULT_PLUGINS_DIR,
 }};
 use serde_json::Value;
+use std::sync::Arc as StdArc;
 
 const FLOW_JSON: &str = "{escaped_flow}";
 const ENV_CONTENT: &str = "{escaped_env}";
+const SUBFLOWS_JSON: &str = "{escaped_subflows}";
 
 fn parse_dotenv(content: &str) -> HashMap<String, Value> {{
     let mut map = HashMap::new();
@@ -154,7 +168,26 @@ async fn main() {{
     let index = Arc::new(GraphIndex::build(&graph));
 
     let mut registry = build_registry();
-    for (id, node, _) in load_wasm_plugins(&[DEFAULT_PLUGINS_DIR]) {{ registry.insert(id, node); }}
+    for (id, node, _) in load_wasm_plugins(&[DEFAULT_PLUGINS_DIR]) {{ registry.insert(id.to_string(), node); }}
+
+    // Load bundled subflows
+    if !SUBFLOWS_JSON.is_empty() {{
+        if let Ok(subflows) = serde_json::from_str::<Vec<String>>(SUBFLOWS_JSON) {{
+            for src in subflows {{
+                if let Ok(flow) = FlowFile::parse(&src) {{
+                    if flow.kind == FlowKind::Subflow && !flow.name.is_empty() {{
+                        let iface = flow.interface.clone().unwrap_or_default();
+                        let type_id = format!("fn:{{}}", flow.name);
+                        let node: Box<dyn twistedflow_engine::Node> = Box::new(SubflowNode {{
+                            flow: StdArc::new(flow),
+                            interface: iface,
+                        }});
+                        registry.insert(type_id, node);
+                    }}
+                }}
+            }}
+        }}
+    }}
 
     let env_vars = parse_dotenv(ENV_CONTENT);
     let context = twistedflow_engine::ExecContext {{
@@ -186,8 +219,9 @@ async fn main() {{
     let opts = Arc::new(RunFlowOpts {{
         index, context, on_status, on_log, cancel,
         http_client: reqwest::Client::builder().user_agent("TwistedFlow-Built/1.0").build().unwrap(),
-        registry,
+        registry: StdArc::new(registry),
         processes: std::sync::Arc::new(tokio::sync::Mutex::new(Vec::new())),
+        depth: 0,
     }});
 
     match twistedflow_engine::run_flow(opts).await {{
@@ -200,6 +234,7 @@ async fn main() {{
         env_name = env_name,
         escaped_flow = escaped_flow,
         escaped_env = escaped_env,
+        escaped_subflows = escaped_subflows,
     );
 
     std::fs::write(build_dir.join("src/main.rs"), main_rs).map_err(|e| e.to_string())?;

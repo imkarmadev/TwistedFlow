@@ -9,8 +9,47 @@
 //!   edges: [{ source, sourceHandle, target, targetHandle, data: { kind } }]
 
 use crate::graph::{EdgeData, EdgeKind, FlowGraph, GraphEdge, GraphNode};
-use serde::Deserialize;
+use crate::node::VariableDecl;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
+
+/// Flow kind — "main" is a regular entry flow, "subflow" is a reusable
+/// callable flow that appears in the palette as a node.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum FlowKind {
+    Main,
+    Subflow,
+}
+
+impl Default for FlowKind {
+    fn default() -> Self {
+        FlowKind::Main
+    }
+}
+
+/// A single pin declaration in a subflow's interface.
+/// `pin_type` is a string (e.g. "exec", "string", "number") so we can use
+/// the same map on the frontend without going through DataType enum tricks.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PinDecl {
+    pub key: String,
+    #[serde(rename = "type")]
+    pub pin_type: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default: Option<Value>,
+}
+
+/// The I/O contract of a subflow — input pins (from Inputs node) and
+/// output pins (from Outputs node).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct Interface {
+    #[serde(default)]
+    pub inputs: Vec<PinDecl>,
+    #[serde(default)]
+    pub outputs: Vec<PinDecl>,
+}
 
 /// The on-disk `.flow.json` structure.
 #[derive(Debug, Deserialize)]
@@ -19,6 +58,20 @@ pub struct FlowFile {
     pub twistedflow: u32,
     #[serde(default)]
     pub name: String,
+    /// `main` (default) or `subflow`. Missing field = main.
+    #[serde(default)]
+    pub kind: FlowKind,
+    /// Subflow palette category. Ignored for main flows.
+    #[serde(default)]
+    pub category: Option<String>,
+    /// Subflow I/O contract. None for main flows; Some with 0+ pins for subflows.
+    #[serde(default)]
+    pub interface: Option<Interface>,
+    /// Flow-scoped typed variable declarations. Each flow (main or subflow)
+    /// owns its own set — subflow variables are NOT visible to the parent
+    /// and vice versa (isolated scope).
+    #[serde(default)]
+    pub variables: Option<Vec<VariableDecl>>,
     pub nodes: Vec<DomainNode>,
     pub edges: Vec<DomainEdge>,
 }

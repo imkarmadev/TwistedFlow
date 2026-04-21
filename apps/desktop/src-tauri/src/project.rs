@@ -28,6 +28,13 @@ pub struct ProjectInfo {
 pub struct FlowSummary {
     pub name: String,
     pub filename: String,
+    /// "main" (default) or "subflow". Drives sidebar grouping.
+    #[serde(default = "default_kind")]
+    pub kind: String,
+}
+
+fn default_kind() -> String {
+    "main".into()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -40,6 +47,21 @@ pub struct FlowDetail {
     pub viewport: Option<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub variables: Option<Value>,
+    /// "main" (default) or "subflow". Backward compatible — absent = main.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
+    /// Subflow I/O contract: `{ inputs: PinDecl[], outputs: PinDecl[] }`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub interface: Option<Value>,
+    /// Subflow palette category.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub category: Option<String>,
+    /// Collapsed-group metadata. Purely visual — `[{ id, label, collapsed,
+    /// position: {x,y} }]`. Engine ignores it; frontend renders the
+    /// placeholder when `collapsed: true` and hides member nodes (those
+    /// with `data.groupId === this.id`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub groups: Option<Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -234,16 +256,35 @@ pub fn list_flows(project_path: String) -> Result<Vec<FlowSummary>, String> {
         let path = entry.path();
         if path.extension().and_then(|e| e.to_str()) == Some("json") {
             let filename = path.file_name().unwrap().to_string_lossy().to_string();
-            let name = filename
+            let fallback_name = filename
                 .strip_suffix(".flow.json")
                 .or_else(|| filename.strip_suffix(".json"))
                 .unwrap_or(&filename)
                 .to_string();
-            flows.push(FlowSummary { name, filename });
+            // Peek the metadata fields used by the sidebar and subflow
+            // navigation. `name` must come from the JSON when present because
+            // subflow node metadata also uses that value; filenames are
+            // sanitized, so using them here breaks navigation for names like
+            // "My Subflow" -> "my-subflow.flow.json".
+            let parsed = std::fs::read_to_string(&path)
+                .ok()
+                .and_then(|c| serde_json::from_str::<Value>(&c).ok());
+            let name = parsed
+                .as_ref()
+                .and_then(|v| v.get("name").and_then(|n| n.as_str()).map(|s| s.to_string()))
+                .unwrap_or(fallback_name);
+            let kind = parsed
+                .as_ref()
+                .and_then(|v| v.get("kind").and_then(|k| k.as_str()).map(|s| s.to_string()))
+                .unwrap_or_else(|| "main".to_string());
+            flows.push(FlowSummary { name, filename, kind });
         }
     }
 
-    flows.sort_by(|a, b| a.name.cmp(&b.name));
+    // Sort: main flows first, subflows second; alphabetical within each group.
+    flows.sort_by(|a, b| {
+        a.kind.cmp(&b.kind).then_with(|| a.name.cmp(&b.name))
+    });
     Ok(flows)
 }
 
@@ -270,10 +311,25 @@ pub fn get_flow(project_path: String, filename: String) -> Result<FlowDetail, St
         edges: parsed.get("edges").cloned().unwrap_or(Value::Array(vec![])),
         viewport: parsed.get("viewport").cloned(),
         variables: parsed.get("variables").cloned(),
+        kind: parsed
+            .get("kind")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
+        interface: parsed.get("interface").cloned(),
+        category: parsed
+            .get("category")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
+        groups: parsed.get("groups").cloned(),
     })
 }
 
 /// Save a flow to disk.
+///
+/// The frontend passes nodes + edges + viewport explicitly. `kind`, `category`,
+/// `interface`, and `variables` are preserved from disk unless explicitly
+/// overridden — this avoids the frontend having to round-trip fields it
+/// doesn't care about on every autosave.
 #[tauri::command]
 pub fn save_flow(
     project_path: String,
@@ -282,10 +338,12 @@ pub fn save_flow(
     edges: Value,
     viewport: Option<Value>,
     variables: Option<Value>,
+    interface: Option<Value>,
+    groups: Option<Value>,
 ) -> Result<(), String> {
     let flow_path = Path::new(&project_path).join("flows").join(&filename);
 
-    // Read existing to preserve name and variables (if not explicitly passed)
+    // Read existing to preserve fields the caller didn't explicitly pass.
     let existing = std::fs::read_to_string(&flow_path)
         .ok()
         .and_then(|c| serde_json::from_str::<Value>(&c).ok());
@@ -300,10 +358,25 @@ pub fn save_flow(
                 .to_string()
         });
 
-    // Use provided variables, or preserve existing from disk
     let vars = variables.or_else(|| {
         existing.as_ref().and_then(|v| v.get("variables").cloned())
     });
+
+    let iface = interface.or_else(|| {
+        existing.as_ref().and_then(|v| v.get("interface").cloned())
+    });
+
+    let grps = groups.or_else(|| {
+        existing.as_ref().and_then(|v| v.get("groups").cloned())
+    });
+
+    let existing_kind = existing
+        .as_ref()
+        .and_then(|v| v.get("kind").and_then(|k| k.as_str()).map(|s| s.to_string()));
+
+    let existing_category = existing
+        .as_ref()
+        .and_then(|v| v.get("category").cloned());
 
     let mut flow = serde_json::json!({
         "twistedflow": 1,
@@ -313,8 +386,22 @@ pub fn save_flow(
         "viewport": viewport.unwrap_or(serde_json::json!({ "x": 0, "y": 0, "zoom": 1.0 })),
     });
 
+    let obj = flow.as_object_mut().unwrap();
+
     if let Some(v) = vars {
-        flow.as_object_mut().unwrap().insert("variables".into(), v);
+        obj.insert("variables".into(), v);
+    }
+    if let Some(k) = existing_kind {
+        obj.insert("kind".into(), Value::String(k));
+    }
+    if let Some(c) = existing_category {
+        obj.insert("category".into(), c);
+    }
+    if let Some(i) = iface {
+        obj.insert("interface".into(), i);
+    }
+    if let Some(g) = grps {
+        obj.insert("groups".into(), g);
     }
 
     let json = serde_json::to_string_pretty(&flow).unwrap();
@@ -337,6 +424,7 @@ pub fn create_flow(project_path: String, name: String) -> Result<FlowSummary, St
     let flow = serde_json::json!({
         "twistedflow": 1,
         "name": name,
+        "kind": "main",
         "variables": [],
         "nodes": [{
             "id": "start-1",
@@ -355,6 +443,69 @@ pub fn create_flow(project_path: String, name: String) -> Result<FlowSummary, St
     Ok(FlowSummary {
         name,
         filename,
+        kind: "main".into(),
+    })
+}
+
+/// Create a new subflow file with Inputs + Outputs nodes pre-wired.
+///
+/// Starter interface: one `in` exec input, one `out` exec output, wired
+/// through from Inputs to Outputs so the flow runs end-to-end on day one.
+/// Author adds data pins via the Interface Panel in the inspector.
+#[tauri::command]
+pub fn create_subflow(project_path: String, name: String) -> Result<FlowSummary, String> {
+    let filename = format!("{}.flow.json", sanitize_filename(&name));
+    let flow_path = Path::new(&project_path).join("flows").join(&filename);
+
+    if flow_path.exists() {
+        return Err(format!("Flow already exists: {}", filename));
+    }
+
+    let flow = serde_json::json!({
+        "twistedflow": 1,
+        "name": name,
+        "kind": "subflow",
+        "category": "Project",
+        "interface": {
+            "inputs":  [{ "key": "in",  "type": "exec" }],
+            "outputs": [{ "key": "out", "type": "exec" }]
+        },
+        "variables": [],
+        "nodes": [
+            {
+                "id": "subflow-inputs",
+                "kind": "subflowInputs",
+                "position": { "x": 120, "y": 240 },
+                "config": {}
+            },
+            {
+                "id": "subflow-outputs",
+                "kind": "subflowOutputs",
+                "position": { "x": 720, "y": 240 },
+                "config": {}
+            }
+        ],
+        "edges": [
+            {
+                "id": "e1",
+                "kind": "exec",
+                "fromNode": "subflow-inputs",
+                "fromPin": "out:in",
+                "toNode": "subflow-outputs",
+                "toPin": "in:out"
+            }
+        ],
+        "viewport": { "x": 0, "y": 0, "zoom": 1.0 }
+    });
+
+    let json = serde_json::to_string_pretty(&flow).unwrap();
+    std::fs::write(&flow_path, json)
+        .map_err(|e| format!("Failed to create subflow: {}", e))?;
+
+    Ok(FlowSummary {
+        name,
+        filename,
+        kind: "subflow".into(),
     })
 }
 
@@ -391,6 +542,11 @@ pub fn rename_flow(
     if let Value::Object(ref mut map) = parsed {
         map.insert("name".into(), Value::String(new_name.clone()));
     }
+    let kind = parsed
+        .get("kind")
+        .and_then(|k| k.as_str())
+        .unwrap_or("main")
+        .to_string();
     let json = serde_json::to_string_pretty(&parsed).unwrap();
     std::fs::write(&new_path, json)
         .map_err(|e| format!("Failed to write: {}", e))?;
@@ -403,6 +559,7 @@ pub fn rename_flow(
     Ok(FlowSummary {
         name: new_name,
         filename: new_filename,
+        kind,
     })
 }
 

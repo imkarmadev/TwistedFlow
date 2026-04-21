@@ -437,10 +437,10 @@ pub struct NodeRegistration {
 inventory::collect!(NodeRegistration);
 
 /// Build a registry of all registered node types.
-pub fn build_registry() -> HashMap<&'static str, Box<dyn Node>> {
+pub fn build_registry() -> HashMap<String, Box<dyn Node>> {
     let mut map = HashMap::new();
     for reg in inventory::iter::<NodeRegistration> {
-        map.insert(reg.type_id, (reg.create)());
+        map.insert(reg.type_id.to_string(), (reg.create)());
     }
     map
 }

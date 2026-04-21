@@ -41,6 +41,20 @@ import {
 import { NodePalette } from "./node-palette";
 import { CustomNode } from "./nodes/custom-node";
 import { PluginNode, type PluginNodeDef } from "./nodes/plugin-node";
+import { SubflowCallNode, SubflowNavContext, type SubflowDef } from "./nodes/subflow-call-node";
+import { GroupNode, GroupCallbacksContext, type GroupNodeCallbacks } from "./nodes/group-node";
+import { PhantomInputsNode, PhantomOutputsNode } from "./nodes/phantom-boundary-node";
+import {
+  applyGroups,
+  createGroup,
+  ungroup as ungroupOp,
+  toggleCollapsed,
+  renameGroup,
+  GROUP_NODE_TYPE,
+  PHANTOM_INPUTS_TYPE,
+  PHANTOM_OUTPUTS_TYPE,
+  type GroupMeta,
+} from "../../lib/groups";
 import {
   NODE_TYPES_MAP,
   NODE_REGISTRY,
@@ -48,63 +62,11 @@ import {
   type NodeTypeDef,
   type NodeCategory,
 } from "../../lib/node-registry";
-import {
-  computeHttpRequestPins,
-  computeStartPins,
-  computeEnvVarPins,
-  computeBreakObjectPins,
-  computeForEachPins,
-  computeConvertPins,
-  computeTapPins,
-  computeLogPins,
-  computeMakeObjectPins,
-  computeFunctionPins,
-  computeSetVariablePins,
-  computeGetVariablePins,
-  computeMatchPins,
-  computeEmitEventPins,
-  computeOnEventPins,
-  computeParseArgsPins,
-  computeStdinPins,
-  computeStderrPins,
-  computePromptPins,
-  computeRegexPins,
-  computeTemplatePins,
-  computeEncodeDecodePins,
-  computeHashPins,
-  computeFilterPins,
-  computeMapPins,
-  computeMergePins,
-  computeReducePins,
-  computeRetryPins,
-  computePrintPins,
-  computeShellExecPins,
-  computeFileReadPins,
-  computeFileWritePins,
-  computeSleepPins,
-  computeExitPins,
-  computeAssertPins,
-  computeAssertTypePins,
-  computeHttpListenPins,
-  computeSendResponsePins,
-  computeRouteMatchPins,
-  computeIfElsePins,
-  computeTryCatchPins,
-  computeRoutePins,
-  computeParseBodyPins,
-  computeSetHeadersPins,
-  computeCorsPins,
-  computeVerifyAuthPins,
-  computeRateLimitPins,
-  computeCookiePins,
-  computeRedirectPins,
-  computeServeStaticPins,
-  type ComputedPins,
-  type PayloadField,
-} from "../../lib/node-pins";
+import { cullDanglingEdges } from "../../lib/canvas-pin-ids";
 import { getInputPinSourceType, getSourcePinType } from "../../lib/schema-resolution";
 import { FlowExecContext, type FlowExecContextValue, type ProjectEnvironment } from "../../lib/exec-context";
 import { FlowVariablesContext, type FlowVariable } from "../../lib/variables-context";
+import { FlowInterfaceContext, type Interface } from "../../lib/flow-interface-context";
 import s from "./flow-canvas.module.css";
 
 interface FlowCanvasProps {
@@ -142,6 +104,12 @@ interface FlowCanvasProps {
   /** Registers a setter so the parent (App / Inspector) can push variable changes
    *  back into the canvas — same pattern as registerUpdateNodeData. */
   registerSetVariables?: (fn: (vars: FlowVariable[]) => void) => void;
+  /** Notifies the parent of the latest subflow interface (subflow files only). */
+  onInterfaceChange?: (iface: Interface | null) => void;
+  /** Registers a setter so the parent Inspector can push interface edits back. */
+  registerSetInterface?: (fn: (iface: Interface) => void) => void;
+  /** Navigate to another flow (double-click a subflow call node). */
+  onSelectFlow: (filename: string) => void;
 }
 
 /**
@@ -165,7 +133,15 @@ interface DomainEdge {
 }
 
 // Sourced from the node registry + custom nodes.
-const NODE_TYPES = { ...NODE_TYPES_MAP, customNode: CustomNode, pluginNode: PluginNode };
+const NODE_TYPES = {
+  ...NODE_TYPES_MAP,
+  customNode: CustomNode,
+  pluginNode: PluginNode,
+  subflowCall: SubflowCallNode,
+  [GROUP_NODE_TYPE]: GroupNode,
+  [PHANTOM_INPUTS_TYPE]: PhantomInputsNode,
+  [PHANTOM_OUTPUTS_TYPE]: PhantomOutputsNode,
+};
 
 const DEFAULT_EDGE_OPTIONS: DefaultEdgeOptions = {
   type: "default",
@@ -195,12 +171,18 @@ function FlowCanvasInner({
   onLog,
   onVariablesChange,
   registerSetVariables,
+  onInterfaceChange,
+  registerSetInterface,
+  onSelectFlow,
 }: FlowCanvasProps) {
   const reactFlow = useReactFlow();
   const rfUpdateNodeInternals = useUpdateNodeInternals();
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
   const [variables, setVariables] = useState<FlowVariable[]>([]);
+  const [flowInterface, setFlowInterface] = useState<Interface | null>(null);
+  const [groups, setGroups] = useState<GroupMeta[]>([]);
+  const [focusedGroupId, setFocusedGroupId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   // ── Palette state ─────────────────────────────────────────
@@ -236,6 +218,8 @@ function FlowCanvasInner({
   const nodesRef = useRef(nodes);
   const edgesRef = useRef(edges);
   const variablesRef = useRef(variables);
+  const interfaceRef = useRef<Interface | null>(flowInterface);
+  const groupsRef = useRef<GroupMeta[]>(groups);
   useEffect(() => {
     nodesRef.current = nodes;
   }, [nodes]);
@@ -245,6 +229,16 @@ function FlowCanvasInner({
   useEffect(() => {
     variablesRef.current = variables;
   }, [variables]);
+  useEffect(() => {
+    interfaceRef.current = flowInterface;
+  }, [flowInterface]);
+  useEffect(() => {
+    groupsRef.current = groups;
+  }, [groups]);
+  // Reset drill-down when switching flows.
+  useEffect(() => {
+    setFocusedGroupId(null);
+  }, [flowFilename]);
 
   // ── Always-on event listeners scoped by flowFilename ──
   // These run regardless of whether *this* canvas started the run —
@@ -332,8 +326,9 @@ function FlowCanvasInner({
   // No custom node defs in the file-based model — custom nodes live in ~/.twistedflow/customNodes
   const customPaletteEntries = useMemo<NodeTypeDef[]>(() => [], []);
 
-  // Load WASM plugin node metadata from Rust backend
+  // Load WASM plugin + subflow node metadata from Rust backend
   const [pluginDefs, setPluginDefs] = useState<PluginNodeDef[]>([]);
+  const [subflowDefs, setSubflowDefs] = useState<SubflowDef[]>([]);
   useEffect(() => {
     void invoke<Array<{
       name: string;
@@ -342,15 +337,26 @@ function FlowCanvasInner({
       description: string;
       inputs?: Array<{ key: string; dataType: string }>;
       outputs?: Array<{ key: string; dataType: string }>;
-    }>>("list_node_types").then((all) => {
-      // Filter to only WASM plugin nodes (not built-in ones from inventory).
-      // Built-in nodes are already in NODE_REGISTRY. Plugin nodes have typeIds
-      // that start with "plugin" by convention, but we can also filter by
-      // checking if the typeId is NOT in NODE_REGISTRY.
+    }>>("list_node_types", { projectPath }).then((all) => {
       const builtinTypes = new Set(NODE_REGISTRY.map((n) => n.type));
-      const plugins = all.filter((n) => !builtinTypes.has(n.typeId));
+      // WASM plugins: typeId not in built-ins and not starting with "fn:"
+      const plugins = all.filter(
+        (n) => !builtinTypes.has(n.typeId) && !n.typeId.startsWith("fn:"),
+      );
       setPluginDefs(
         plugins.map((n) => ({
+          name: n.name,
+          typeId: n.typeId,
+          category: n.category,
+          description: n.description ?? "",
+          inputs: n.inputs ?? [],
+          outputs: n.outputs ?? [],
+        })),
+      );
+      // Subflows: typeId starts with "fn:"
+      const subflows = all.filter((n) => n.typeId.startsWith("fn:"));
+      setSubflowDefs(
+        subflows.map((n) => ({
           name: n.name,
           typeId: n.typeId,
           category: n.category,
@@ -362,7 +368,7 @@ function FlowCanvasInner({
     }).catch(() => {
       // list_node_types not available or failed — ignore
     });
-  }, []);
+  }, [projectPath, flowFilename]);
 
   // Build palette entries from WASM plugin nodes
   const pluginPaletteEntries = useMemo<NodeTypeDef[]>(
@@ -382,6 +388,34 @@ function FlowCanvasInner({
         defaultData: () => ({ _pluginDef: def }),
       })),
     [pluginDefs],
+  );
+
+  // Build palette entries from project subflows
+  const subflowPaletteEntries = useMemo<NodeTypeDef[]>(
+    () =>
+      subflowDefs.map((def) => {
+        const hasExecIn = def.inputs.some((p) => p.dataType === "exec");
+        const hasExecOut = def.outputs.some((p) => p.dataType === "exec");
+        const dataIn = def.inputs.filter((p) => p.dataType !== "exec");
+        const dataOut = def.outputs.filter((p) => p.dataType !== "exec");
+        return {
+          type: "subflowCall",
+          label: def.name,
+          category: (def.category || "Project") as NodeCategory,
+          description: def.description || `Subflow: ${def.name}`,
+          component: SubflowCallNode,
+          hasExecIn,
+          hasExecOut,
+          hasDataIn: dataIn.length > 0,
+          hasDataOut: dataOut.length > 0,
+          defaultExecInPin: hasExecIn
+            ? `exec-in:${def.inputs.find((p) => p.dataType === "exec")!.key}`
+            : undefined,
+          acceptsDataInput: () => true,
+          defaultData: () => ({ _subflowDef: def }),
+        };
+      }),
+    [subflowDefs],
   );
 
   /** Called by React Flow when the user finishes panning or zooming. */
@@ -419,6 +453,9 @@ function FlowCanvasInner({
       edges: unknown[];
       variables?: FlowVariable[];
       viewport?: { x: number; y: number; zoom: number };
+      interface?: Interface | null;
+      kind?: string | null;
+      groups?: GroupMeta[] | null;
     } | null>("get_flow", { projectPath, filename: flowFilename }).then((flow) => {
       if (cancelled || !flow) return;
       const domainNodes = (flow.nodes as DomainNode[]) ?? [];
@@ -426,6 +463,8 @@ function FlowCanvasInner({
       setNodes(domainNodes.map(domainToRf));
       setEdges(domainEdges.map(domainEdgeToRf));
       setVariables((flow.variables as FlowVariable[]) ?? []);
+      setFlowInterface(flow.interface ?? null);
+      setGroups(flow.groups ?? []);
 
       // Restore saved viewport or fit. We use a timeout to let React
       // Flow fully process the new nodes before manipulating the viewport.
@@ -464,6 +503,8 @@ function FlowCanvasInner({
           edges: edgesRef.current.map(rfEdgeToDomain),
           viewport: viewportRef.current,
           variables: variablesRef.current,
+          interface: interfaceRef.current ?? null,
+          groups: groupsRef.current.length > 0 ? groupsRef.current : null,
         });
       }
     };
@@ -489,21 +530,54 @@ function FlowCanvasInner({
         edges: domainEdges,
         viewport: viewportRef.current,
         variables,
+        interface: flowInterface ?? null,
+        groups: groups.length > 0 ? groups : null,
       });
     }, 600);
     return () => clearTimeout(t);
-  }, [nodes, edges, variables, viewportTick, projectPath, flowFilename, loading]);
+  }, [nodes, edges, variables, flowInterface, groups, viewportTick, projectPath, flowFilename, loading]);
 
   // ── React Flow handlers ────────────────────────────────────
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => {
-      setNodes((nds) => applyNodeChanges(changes, nds));
-      // Bubble selection changes up so the inspector can react
+      // Split changes: group-placeholder changes update `groups` state;
+      // phantom node changes are discarded entirely (they're synthetic,
+      // not part of persisted state); the rest update the node list.
+      const groupChanges: NodeChange[] = [];
+      const normalChanges: NodeChange[] = [];
       for (const ch of changes) {
+        const id = (ch as unknown as { id?: string }).id;
+        if (id && id.startsWith("group:")) {
+          groupChanges.push(ch);
+        } else if (id === "phantom-inputs" || id === "phantom-outputs") {
+          // Ignore — phantoms are drill-down scaffolding only
+          continue;
+        } else {
+          normalChanges.push(ch);
+        }
+      }
+
+      if (normalChanges.length > 0) {
+        setNodes((nds) => applyNodeChanges(normalChanges, nds));
+      }
+
+      for (const ch of groupChanges) {
+        // Apply position on every frame (including mid-drag) so the
+        // synthetic node doesn't snap back to the memoized `groups[i]`
+        // position and produce jitter. Autosave is debounced separately.
+        if (ch.type === "position" && ch.position) {
+          const gid = (ch as unknown as { id: string }).id.replace(/^group:/, "");
+          const pos = ch.position;
+          setGroups((gs) =>
+            gs.map((g) => (g.id === gid ? { ...g, position: { x: pos.x, y: pos.y } } : g)),
+          );
+        }
+      }
+
+      // Bubble selection for normal nodes so the inspector reacts.
+      for (const ch of normalChanges) {
         if (ch.type === "select") {
           if (ch.selected) {
-            // Look up the actual node in the next tick — selection events
-            // arrive before the node list applies the change.
             setNodes((nds) => {
               const found = nds.find((n) => n.id === ch.id);
               if (found) onSelectionChange(found);
@@ -547,7 +621,10 @@ function FlowCanvasInner({
       // We do this in a microtask so it sees the just-updated node list.
       queueMicrotask(() => {
         setNodes((latestNodes) => {
-          setEdges((eds) => cullDanglingEdges(eds, latestNodes, variablesRef.current));
+          setEdges((eds) => cullDanglingEdges(eds, latestNodes, {
+            variables: variablesRef.current,
+            flowInterface: interfaceRef.current,
+          }));
           return latestNodes;
         });
         // Force React Flow to re-scan this node's Handle elements.
@@ -561,6 +638,11 @@ function FlowCanvasInner({
     [rfUpdateNodeInternals],
   );
 
+  useEffect(() => {
+    if (loading || nodes.length === 0) return;
+    setEdges((eds) => cullDanglingEdges(eds, nodes, { variables, flowInterface }));
+  }, [flowInterface, loading, nodes, variables]);
+
   const deleteNode = useCallback((id: string) => {
     setNodes((nds) => nds.filter((n) => n.id !== id));
     setEdges((eds) => eds.filter((e) => e.source !== id && e.target !== id));
@@ -571,6 +653,15 @@ function FlowCanvasInner({
   useEffect(() => registerUpdateNodeData(updateNodeData), [registerUpdateNodeData, updateNodeData]);
   useEffect(() => registerDeleteNode(deleteNode), [registerDeleteNode, deleteNode]);
   useEffect(() => registerSetVariables?.(setVariables), [registerSetVariables]);
+
+  // Notify parent of interface changes + register push-setter for Inspector.
+  useEffect(() => {
+    onInterfaceChange?.(flowInterface);
+  }, [flowInterface, onInterfaceChange]);
+  useEffect(
+    () => registerSetInterface?.((iface) => setFlowInterface(iface)),
+    [registerSetInterface],
+  );
 
   // Active env = the one selected on the Start node. The Start node stores
   // the env filename (e.g. "production.env.json") in data.environmentFilename.
@@ -627,11 +718,12 @@ function FlowCanvasInner({
     // Invoke — event listeners are always-on (see useEffect above)
     void invoke("run_flow", {
       flowId: flowFilename,
+      projectPath,
       nodes: nodesRef.current,
       edges: edgesRef.current,
       context,
     }).catch((err) => console.error("[runFlow]", err));
-  }, [running, flowFilename, environments, activeEnvironment]);
+  }, [running, projectPath, flowFilename, environments, activeEnvironment]);
 
   const stop = useCallback(() => {
     void invoke("stop_flow", { flowId: flowFilename });
@@ -871,8 +963,145 @@ function FlowCanvasInner({
     [variables],
   );
 
+  const interfaceContextValue = useMemo(
+    () => ({ interface: flowInterface, setInterface: setFlowInterface }),
+    [flowInterface],
+  );
+
+  // ── Group commands ──────────────────────────────────────────
+  const handleCollapseSelection = useCallback(() => {
+    const selected = nodes.filter((n) => n.selected);
+    const ids = selected.map((n) => n.id).filter((id) => !id.startsWith("group:"));
+    if (ids.length < 2) return;
+    // Don't allow grouping nodes that are already in a different group.
+    const existingGroups = new Set(
+      selected
+        .map((n) => (n.data as { groupId?: string } | undefined)?.groupId)
+        .filter(Boolean),
+    );
+    if (existingGroups.size > 1) return;
+
+    const label = `Group ${groups.length + 1}`;
+    const { nodes: nextNodes, group } = createGroup(nodes, ids, label);
+    setNodes(nextNodes);
+    setGroups([...groups, group]);
+  }, [nodes, groups, setNodes]);
+
+  const handleUngroup = useCallback((groupId: string) => {
+    const { nodes: nextNodes, groups: nextGroups } = ungroupOp(nodes, groups, groupId);
+    setNodes(nextNodes);
+    setGroups(nextGroups);
+    if (focusedGroupId === groupId) setFocusedGroupId(null);
+  }, [nodes, groups, focusedGroupId, setNodes]);
+
+  const handleExpand = useCallback((groupId: string) => {
+    setGroups((gs) => toggleCollapsed(gs, groupId));
+  }, []);
+
+  const handleRename = useCallback((groupId: string, label: string) => {
+    setGroups((gs) => renameGroup(gs, groupId, label));
+  }, []);
+
+  const groupCallbacks = useMemo<GroupNodeCallbacks>(
+    () => ({ onUngroup: handleUngroup, onExpand: handleExpand, onRename: handleRename }),
+    [handleUngroup, handleExpand, handleRename],
+  );
+
+  // ── Apply group transform before handing nodes/edges to React Flow ──
+  const { renderedNodes, renderedEdges } = useMemo(() => {
+    const { nodes: n, edges: e } = applyGroups(nodes, edges, groups, focusedGroupId);
+    return { renderedNodes: n, renderedEdges: e };
+  }, [nodes, edges, groups, focusedGroupId]);
+
+  // ── Double-click: drill into group OR navigate to subflow file ──
+  const [subflowNameToFilename, setSubflowNameToFilename] = useState<Record<string, string>>({});
+  useEffect(() => {
+    if (!projectPath) return;
+    void invoke<Array<{ filename: string; name: string; kind?: string }>>("list_flows", {
+      projectPath,
+    }).then((list) => {
+      const map: Record<string, string> = {};
+      for (const f of list) {
+        if (f.kind === "subflow") map[f.name] = f.filename;
+      }
+      setSubflowNameToFilename(map);
+    }).catch(() => {});
+  }, [projectPath, flowFilename]);
+
+  // Group drill-down — runs from React Flow's event system since the group
+  // placeholder doesn't have its own internal click handler.
+  const onNodeDoubleClick = useCallback(
+    (_: React.MouseEvent, node: Node) => {
+      if (node.type === GROUP_NODE_TYPE) {
+        const gid = (node.data as { _groupId?: string } | undefined)?._groupId;
+        if (gid) setFocusedGroupId(gid);
+      }
+    },
+    [],
+  );
+
+  // Subflow navigation — called directly from SubflowCallNode via context
+  // (bypassing React Flow's event dispatch). Looks up the filename live in
+  // `list_flows` so we never hit a stale cache.
+  const navigateToSubflow = useCallback(
+    (name: string) => {
+      if (!projectPath) return;
+      const cached = subflowNameToFilename[name];
+      if (cached) {
+        onSelectFlow(cached);
+        return;
+      }
+      void invoke<Array<{ filename: string; name: string; kind?: string }>>(
+        "list_flows",
+        { projectPath },
+      )
+        .then((list) => {
+          const match = list.find((f) => f.kind === "subflow" && f.name === name);
+          if (match) onSelectFlow(match.filename);
+          else console.warn(`[subflow nav] '${name}' not found in project`);
+        })
+        .catch((e) => console.error("[subflow nav] list_flows failed", e));
+    },
+    [projectPath, subflowNameToFilename, onSelectFlow],
+  );
+
+  // ── Keyboard: Cmd/Ctrl+G collapse selection, Shift+Cmd/Ctrl+G ungroup ──
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target?.tagName === "INPUT" || target?.tagName === "TEXTAREA") return;
+      if (target?.isContentEditable) return;
+
+      if ((e.metaKey || e.ctrlKey) && (e.key === "g" || e.key === "G")) {
+        e.preventDefault();
+        if (e.shiftKey) {
+          // Ungroup: find a selected group placeholder OR a member of a group
+          const selected = nodes.find((n) => n.selected);
+          if (!selected) return;
+          let gid: string | undefined;
+          if (selected.type === GROUP_NODE_TYPE) {
+            gid = (selected.data as { _groupId?: string } | undefined)?._groupId;
+          } else {
+            gid = (selected.data as { groupId?: string } | undefined)?.groupId;
+          }
+          if (gid) handleUngroup(gid);
+        } else {
+          handleCollapseSelection();
+        }
+      }
+
+      // Escape exits drill-down
+      if (e.key === "Escape" && focusedGroupId) {
+        setFocusedGroupId(null);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [nodes, focusedGroupId, handleCollapseSelection, handleUngroup]);
+
   return (
     <FlowVariablesContext.Provider value={variablesContextValue}>
+    <FlowInterfaceContext.Provider value={interfaceContextValue}>
     <FlowExecContext.Provider value={execContextValue}>
       <div className={s.canvas}>
         <div className={s.toolbar}>
@@ -912,15 +1141,41 @@ function FlowCanvasInner({
           </div>
         )}
 
+        {focusedGroupId && (
+          <div className={s.breadcrumb}>
+            <button
+              className={s.breadcrumbRoot}
+              onClick={() => setFocusedGroupId(null)}
+              title="Back to the full flow"
+            >
+              {flowFilename?.replace(/\.flow\.json$/, "") ?? "flow"}
+            </button>
+            <span className={s.breadcrumbSep}>›</span>
+            <span className={s.breadcrumbCurrent}>
+              {groups.find((g) => g.id === focusedGroupId)?.label ?? "Group"}
+            </span>
+            <button
+              className={s.breadcrumbExit}
+              onClick={() => setFocusedGroupId(null)}
+              title="Exit drill-down (Esc)"
+            >
+              ×
+            </button>
+          </div>
+        )}
+
+        <SubflowNavContext.Provider value={navigateToSubflow}>
+        <GroupCallbacksContext.Provider value={groupCallbacks}>
         <ReactFlow
-          nodes={nodes}
-          edges={edges}
+          nodes={renderedNodes}
+          edges={renderedEdges}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
           onConnectEnd={onConnectEnd}
           onPaneContextMenu={onPaneContextMenu}
           onMoveEnd={onMoveEnd}
+          onNodeDoubleClick={onNodeDoubleClick}
           nodeTypes={nodeTypes}
           defaultEdgeOptions={DEFAULT_EDGE_OPTIONS}
           proOptions={{ hideAttribution: true }}
@@ -930,12 +1185,14 @@ function FlowCanvasInner({
           {loading && <div className={s.spinner} />}
           {showMinimap && <MiniMap pannable zoomable className={s.minimap} />}
         </ReactFlow>
+        </GroupCallbacksContext.Provider>
+        </SubflowNavContext.Provider>
 
 
         {palette && (
           <NodePalette
             position={palette.screenPos}
-            extraNodes={[...customPaletteEntries, ...pluginPaletteEntries]}
+            extraNodes={[...customPaletteEntries, ...pluginPaletteEntries, ...subflowPaletteEntries]}
             title={
               palette.pendingConnection
                 ? palette.pendingConnection.sourceKind === "exec"
@@ -944,6 +1201,8 @@ function FlowCanvasInner({
                 : "Add Node"
             }
             filter={(def) => {
+              // Always hide explicitly-hidden node types (e.g. subflow I/O)
+              if (def.hidden) return false;
               // Hide singletons that already exist
               if (def.singleton && nodes.some((n) => n.type === def.type)) return false;
 
@@ -972,6 +1231,7 @@ function FlowCanvasInner({
         )}
       </div>
     </FlowExecContext.Provider>
+    </FlowInterfaceContext.Provider>
     </FlowVariablesContext.Provider>
   );
 }
@@ -983,6 +1243,10 @@ function domainToRf(n: DomainNode): Node {
   // Unknown kind + has _pluginDef → it's a WASM plugin node
   if (!KNOWN_TYPES.has(n.kind) && n.config?._pluginDef) {
     type = "pluginNode";
+  }
+  // `fn:<name>` → subflow call node
+  if (n.kind.startsWith("fn:")) {
+    type = "subflowCall";
   }
   return {
     id: n.id,
@@ -999,6 +1263,10 @@ function rfToDomain(n: Node): DomainNode {
   if (n.type === "pluginNode") {
     const pluginDef = data._pluginDef as { typeId?: string } | undefined;
     kind = pluginDef?.typeId ?? "pluginNode";
+  }
+  if (n.type === "subflowCall") {
+    const def = data._subflowDef as { typeId?: string } | undefined;
+    kind = def?.typeId ?? "subflowCall";
   }
   return {
     id: n.id,
@@ -1097,156 +1365,6 @@ function validateFlow(
   return { canRun: true, reason: null };
 }
 
-/**
- * After a node's data changes, the set of pins it exposes may shrink.
- * Drop any edges whose source or target handle no longer exists.
- */
-function cullDanglingEdges(edges: Edge[], nodes: Node[], variables: FlowVariable[] = []): Edge[] {
-  const pinIndex = new Map<string, Set<string>>();
-  const nodeIndex = new Map<string, Node>();
-  for (const n of nodes) {
-    pinIndex.set(n.id, collectPinIds(n, variables));
-    nodeIndex.set(n.id, n);
-  }
-  return edges.filter((e) => {
-    const srcNode = nodeIndex.get(e.source);
-    const tgtPins = pinIndex.get(e.target);
-    if (!srcNode || !tgtPins) return false;
-    // Break-Object and On Event have dynamic output pins (Break-Object
-    // mirrors a source schema, On Event mirrors an emitter's payload).
-    // collectPinIds can't enumerate them, so we skip outgoing-pin
-    // validation for those sources.
-    if (srcNode.type !== "breakObject" && srcNode.type !== "onEvent") {
-      const srcPins = pinIndex.get(e.source);
-      if (e.sourceHandle && !srcPins?.has(e.sourceHandle)) return false;
-    }
-    if (e.targetHandle && !tgtPins.has(e.targetHandle)) return false;
-    return true;
-  });
-}
-
-function collectPinIds(node: Node, variables: FlowVariable[] = []): Set<string> {
-  let pins: ComputedPins;
-  if (node.type === "start") pins = computeStartPins();
-  else if (node.type === "httpRequest") pins = computeHttpRequestPins(node.data ?? {});
-  else if (node.type === "envVar")
-    pins = computeEnvVarPins((node.data as { varKey?: string } | undefined)?.varKey);
-  else if (node.type === "breakObject") pins = computeBreakObjectPins();
-  else if (node.type === "forEachSequential" || node.type === "forEachParallel")
-    pins = computeForEachPins();
-  else if (node.type === "convert")
-    pins = computeConvertPins(
-      (node.data as { targetType?: string } | undefined)?.targetType,
-    );
-  else if (node.type === "tap") pins = computeTapPins();
-  else if (node.type === "log") pins = computeLogPins();
-  else if (node.type === "setVariable") {
-    const varName = (node.data as { varName?: string } | undefined)?.varName;
-    const decl = variables.find((v) => v.name === varName);
-    pins = computeSetVariablePins(decl?.type);
-  } else if (node.type === "getVariable") {
-    const varName = (node.data as { varName?: string } | undefined)?.varName;
-    const decl = variables.find((v) => v.name === varName);
-    pins = computeGetVariablePins(varName, decl?.type);
-  }
-  else if (node.type === "match")
-    pins = computeMatchPins(
-      (node.data as { cases?: Array<{ value: string; label?: string }> } | undefined)?.cases,
-    );
-  else if (node.type === "function") {
-    const fd = node.data as { inputs?: PayloadField[]; outputs?: PayloadField[] } | undefined;
-    pins = computeFunctionPins(fd?.inputs, fd?.outputs);
-  } else if (node.type === "makeObject")
-    pins = computeMakeObjectPins(
-      (node.data as { fields?: PayloadField[] } | undefined)?.fields,
-    );
-  else if (node.type === "emitEvent")
-    pins = computeEmitEventPins(
-      (node.data as { payload?: PayloadField[] } | undefined)?.payload,
-    );
-  else if (node.type === "onEvent") {
-    // OnEvent payload pins are dynamic — depend on matching emitter(s).
-    // We can't enumerate them statically here without scanning all nodes,
-    // so we only return the static pins (exec-out). Edges from dynamic
-    // payload pins are protected from culling the same way Break-Object's
-    // dynamic outputs are.
-    pins = computeOnEventPins();
-  }
-  // CLI nodes
-  else if (node.type === "parseArgs") pins = computeParseArgsPins();
-  else if (node.type === "stdin") pins = computeStdinPins();
-  else if (node.type === "stderr") pins = computeStderrPins();
-  else if (node.type === "prompt") pins = computePromptPins();
-  // String nodes
-  else if (node.type === "regex")
-    pins = computeRegexPins((node.data as { mode?: string } | undefined)?.mode);
-  else if (node.type === "template")
-    pins = computeTemplatePins((node.data as { template?: string } | undefined)?.template);
-  else if (node.type === "encodeDecode") pins = computeEncodeDecodePins();
-  else if (node.type === "hash")
-    pins = computeHashPins((node.data as { algorithm?: string } | undefined)?.algorithm);
-  // Data transform nodes
-  else if (node.type === "filter") pins = computeFilterPins();
-  else if (node.type === "map") pins = computeMapPins();
-  else if (node.type === "merge") pins = computeMergePins();
-  else if (node.type === "reduce") pins = computeReducePins();
-  // Flow control
-  else if (node.type === "retry") pins = computeRetryPins();
-  // System nodes
-  else if (node.type === "print") pins = computePrintPins();
-  else if (node.type === "shellExec") pins = computeShellExecPins();
-  else if (node.type === "fileRead") pins = computeFileReadPins();
-  else if (node.type === "fileWrite") pins = computeFileWritePins();
-  else if (node.type === "sleep") pins = computeSleepPins();
-  else if (node.type === "exit") pins = computeExitPins();
-  // Testing nodes
-  else if (node.type === "assert") pins = computeAssertPins();
-  else if (node.type === "assertType") pins = computeAssertTypePins();
-  // HTTP Server nodes (pre-existing)
-  else if (node.type === "httpListen") pins = computeHttpListenPins();
-  else if (node.type === "sendResponse") pins = computeSendResponsePins();
-  else if (node.type === "routeMatch") pins = computeRouteMatchPins();
-  // Flow control (pre-existing)
-  else if (node.type === "ifElse") pins = computeIfElsePins();
-  else if (node.type === "tryCatch") pins = computeTryCatchPins();
-  // HTTP Server nodes (new)
-  else if (node.type === "route")
-    pins = computeRoutePins(
-      (node.data as { routes?: Array<{ method: string; path: string; label?: string }> } | undefined)?.routes,
-    );
-  else if (node.type === "parseBody") pins = computeParseBodyPins();
-  else if (node.type === "setHeaders") pins = computeSetHeadersPins();
-  else if (node.type === "cors") pins = computeCorsPins();
-  else if (node.type === "verifyAuth") pins = computeVerifyAuthPins();
-  else if (node.type === "rateLimit") pins = computeRateLimitPins();
-  else if (node.type === "cookie")
-    pins = computeCookiePins((node.data as { mode?: string } | undefined)?.mode);
-  else if (node.type === "redirect") pins = computeRedirectPins();
-  else if (node.type === "serveStatic") pins = computeServeStaticPins();
-  else if (node.type === "customNode") {
-    const def = (node.data as Record<string, unknown>)?._customDef as
-      | { inputs?: Array<{ key: string }>; outputs?: Array<{ key: string }>; isAsync?: boolean }
-      | undefined;
-    const ids = new Set<string>();
-    if (def?.isAsync) { ids.add("exec-in"); ids.add("exec-out"); }
-    for (const inp of def?.inputs ?? []) ids.add(`in:${inp.key}`);
-    for (const out of def?.outputs ?? []) ids.add(`out:${out.key}`);
-    return ids;
-  } else if (node.type === "pluginNode") {
-    // WASM plugin nodes: read pin defs from embedded _pluginDef metadata
-    const pluginDef = (node.data as Record<string, unknown>)?._pluginDef as
-      | { inputs?: Array<{ key: string }>; outputs?: Array<{ key: string }> }
-      | undefined;
-    const ids = new Set<string>();
-    ids.add("exec-in");
-    ids.add("exec-out");
-    for (const inp of pluginDef?.inputs ?? []) ids.add(`in:${inp.key}`);
-    for (const out of pluginDef?.outputs ?? []) ids.add(`out:${out.key}`);
-    return ids;
-  } else pins = { inputs: [], outputs: [] };
-  return new Set([...pins.inputs.map((p) => p.id), ...pins.outputs.map((p) => p.id)]);
-}
-
 // Kind ↔ React Flow type are 1:1 — pass-through with a fallback for
 // forward compatibility.
 const KNOWN_TYPES = new Set([
@@ -1308,6 +1426,12 @@ const KNOWN_TYPES = new Set([
   "cookie",
   "redirect",
   "serveStatic",
+  // Subflow I/O
+  "subflowInputs",
+  "subflowOutputs",
+  "subflowCall",
+  // Collapsed-group placeholder — synthetic, never persisted as a node
+  "group",
 ]);
 
 function kindToType(kind: string): string {

@@ -14,7 +14,8 @@
   },
   "scripts": {
     "build": "bun build ./src/index.ts --outdir ./dist --target bun && tsc --emitDeclarationOnly",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "lint": "tsc --noEmit"
   },
   "dependencies": {
     "zod": "^3.24.0"

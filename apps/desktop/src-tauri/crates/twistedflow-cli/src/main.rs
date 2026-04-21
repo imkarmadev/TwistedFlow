@@ -17,7 +17,7 @@ use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 use twistedflow_engine::{
     FlowFile, GraphIndex, LogEntry, RunFlowOpts, StatusEvent,
-    build_registry, load_wasm_plugins, DEFAULT_PLUGINS_DIR,
+    build_registry, load_subflows, load_wasm_plugins, DEFAULT_PLUGINS_DIR,
 };
 
 #[derive(Parser)]
@@ -160,11 +160,24 @@ async fn run_flow(
     let wasm_nodes = load_wasm_plugins(&plugin_dirs);
     let wasm_count = wasm_nodes.len();
     for (type_id, node, _meta) in wasm_nodes {
-        registry.insert(type_id, node);
+        registry.insert(type_id.to_string(), node);
     }
 
     if !quiet && wasm_count > 0 {
         eprintln!("  loaded {} WASM plugin node(s)", wasm_count);
+    }
+
+    // Load subflows from the flow file's project dir
+    // ({project}/flows/xxx.flow.json → project = file.parent().parent())
+    if let Some(project_dir) = file.parent().and_then(|p| p.parent()) {
+        let subflows = load_subflows(project_dir, |msg| eprintln!("{}", msg));
+        let sub_count = subflows.len();
+        for (type_id, node, _meta) in subflows {
+            registry.insert(type_id, node);
+        }
+        if !quiet && sub_count > 0 {
+            eprintln!("  loaded {} subflow(s)", sub_count);
+        }
     }
 
     // 4. Parse env vars
@@ -246,8 +259,9 @@ async fn run_flow(
         on_log,
         cancel,
         http_client,
-        registry,
+        registry: std::sync::Arc::new(registry),
         processes: std::sync::Arc::new(tokio::sync::Mutex::new(Vec::new())),
+        depth: 0,
     });
 
     // 8. Run!

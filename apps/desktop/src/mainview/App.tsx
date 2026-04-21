@@ -30,6 +30,7 @@ import { InspectorPanel } from "./components/inspector/inspector-panel";
 import { ProjectSettingsModal } from "./components/settings/project-settings-modal";
 import type { DataType } from "@twistedflow/core";
 import type { FlowVariable } from "./lib/variables-context";
+import type { Interface } from "./lib/flow-interface-context";
 import { ConsoleContext, type ConsoleEntry } from "./lib/console-context";
 import { ConsolePanel } from "./components/console/console-panel";
 import { checkForUpdate } from "./lib/update-checker";
@@ -113,6 +114,14 @@ export default function App() {
     [],
   );
 
+  // ── Flow interface (subflows only; null for main flows) ───────────
+  const [flowInterface, setFlowInterfaceState] = useState<Interface | null>(null);
+
+  const registerInterface = useCallback(
+    (iface: Interface | null) => setFlowInterfaceState(iface),
+    [],
+  );
+
   // ── Last-run results / errors / raw responses ─────────────────────
   const [lastResults, setLastResults] = useState<Record<string, Record<string, unknown>>>({});
   const [lastErrors, setLastErrors] = useState<Record<string, string>>({});
@@ -184,6 +193,7 @@ export default function App() {
     () => "unknown",
   );
   const setVariablesRef = useRef<(vars: FlowVariable[]) => void>(() => {});
+  const setInterfaceRef = useRef<(iface: Interface) => void>(() => {});
 
   const registerUpdateNodeData = useCallback(
     (fn: (id: string, data: Record<string, unknown>) => void) => {
@@ -203,6 +213,12 @@ export default function App() {
   const registerSetVariables = useCallback(
     (fn: (vars: FlowVariable[]) => void) => {
       setVariablesRef.current = fn;
+    },
+    [],
+  );
+  const registerSetInterface = useCallback(
+    (fn: (iface: Interface) => void) => {
+      setInterfaceRef.current = fn;
     },
     [],
   );
@@ -286,6 +302,7 @@ export default function App() {
   useEffect(() => {
     setSelectedNode(null);
     setFlowVariables([]);
+    setFlowInterfaceState(null);
   }, [activeFlowFilename]);
 
   // ── Project open / create handlers (called by Sidebar) ───────────
@@ -314,6 +331,15 @@ export default function App() {
     (vars: FlowVariable[]) => {
       setFlowVariables(vars);
       setVariablesRef.current(vars);
+    },
+    [],
+  );
+
+  /** When the inspector edits the subflow interface, push into the canvas. */
+  const handleFlowInterfaceChange = useCallback(
+    (iface: Interface) => {
+      setFlowInterfaceState(iface);
+      setInterfaceRef.current(iface);
     },
     [],
   );
@@ -384,6 +410,9 @@ export default function App() {
                 onLog={handleLog}
                 onVariablesChange={registerVariables}
                 registerSetVariables={registerSetVariables}
+                onInterfaceChange={registerInterface}
+                registerSetInterface={registerSetInterface}
+                onSelectFlow={setActiveFlowFilename}
               />
             ) : (
               <div className={s.empty}>
@@ -409,6 +438,8 @@ export default function App() {
               getInputType={getInputType}
               flowVariables={flowVariables}
               onFlowVariablesChange={handleFlowVariablesChange}
+              flowInterface={flowInterface}
+              onFlowInterfaceChange={handleFlowInterfaceChange}
             />
           )}
         </div>

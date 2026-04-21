@@ -59,6 +59,10 @@ pub mod reduce_node;
 // ── Flow control (new) ─────────────────────────────────────────────────────
 pub mod retry_node;
 
+// ── Subflow I/O (v1.5.0) ───────────────────────────────────────────────────
+pub mod subflow_inputs;
+pub mod subflow_outputs;
+
 // ── Pure-data nodes ─────────────────────────────────────────────────────────
 pub mod break_object;
 pub mod convert;
@@ -124,3 +128,7 @@ pub use reduce_node::ReduceNode;
 
 // Flow control
 pub use retry_node::RetryNode;
+
+// Subflow I/O
+pub use subflow_inputs::SubflowInputsNode;
+pub use subflow_outputs::SubflowOutputsNode;

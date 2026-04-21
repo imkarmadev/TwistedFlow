@@ -9,7 +9,8 @@
     "hmr": "vite --port 5173",
     "vite:build": "vite build",
     "build": "tauri build",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "lint": "tsc --noEmit"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",

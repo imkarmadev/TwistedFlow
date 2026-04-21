@@ -89,6 +89,7 @@ pub fn run() {
             project::get_flow,
             project::save_flow,
             project::create_flow,
+            project::create_subflow,
             project::delete_flow,
             project::rename_flow,
             project::list_environments,

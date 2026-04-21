@@ -40,6 +40,7 @@ struct LogEntryPayload {
 pub async fn run_flow(
     app: AppHandle,
     flow_id: String,
+    project_path: String,
     nodes: serde_json::Value,
     edges: serde_json::Value,
     context: serde_json::Value,
@@ -102,13 +103,20 @@ pub async fn run_flow(
         .build()
         .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
 
-    // Build the node registry: built-in nodes (via inventory) + WASM plugins.
+    // Build the node registry: built-in nodes (via inventory) + WASM plugins + project subflows.
     let mut registry = twistedflow_engine::build_registry();
 
     // Load WASM plugins from default + project-specific directories
     let plugin_dirs = vec![twistedflow_engine::DEFAULT_PLUGINS_DIR];
     let wasm_nodes = twistedflow_engine::load_wasm_plugins(&plugin_dirs);
     for (type_id, node, _meta) in wasm_nodes {
+        registry.insert(type_id.to_string(), node);
+    }
+
+    // Load subflows from {project}/flows/*.flow.json with kind=subflow
+    let project_dir = std::path::Path::new(&project_path);
+    let subflow_nodes = twistedflow_engine::load_subflows(project_dir, |msg| eprintln!("{}", msg));
+    for (type_id, node, _meta) in subflow_nodes {
         registry.insert(type_id, node);
     }
 
@@ -119,8 +127,9 @@ pub async fn run_flow(
         on_log,
         cancel: cancel.clone(),
         http_client,
-        registry,
+        registry: std::sync::Arc::new(registry),
         processes: std::sync::Arc::new(tokio::sync::Mutex::new(Vec::new())),
+        depth: 0,
     });
 
     // Run the engine in a spawned task so panics are caught by tokio
@@ -159,9 +168,11 @@ pub fn running_flows(executor_state: State<'_, ExecutorState>) -> Vec<String> {
     guard.keys().cloned().collect()
 }
 
-/// Return metadata for all available node types (built-in + WASM plugins).
+/// Return metadata for all available node types (built-in + WASM plugins + subflows).
+/// `project_path` is optional — when provided, subflows from that project's
+/// `flows/` directory are included (as `fn:<name>` types).
 #[tauri::command]
-pub fn list_node_types() -> serde_json::Value {
+pub fn list_node_types(project_path: Option<String>) -> serde_json::Value {
     let mut all = Vec::new();
 
     // Built-in nodes
@@ -174,6 +185,15 @@ pub fn list_node_types() -> serde_json::Value {
     let wasm_nodes = twistedflow_engine::load_wasm_plugins(&plugin_dirs);
     for (_type_id, _node, meta) in wasm_nodes {
         all.push(serde_json::to_value(&meta).unwrap_or_default());
+    }
+
+    // Subflows from the active project
+    if let Some(p) = project_path {
+        let project_dir = std::path::Path::new(&p);
+        let subflow_nodes = twistedflow_engine::load_subflows(project_dir, |msg| eprintln!("{}", msg));
+        for (_type_id, _node, meta) in subflow_nodes {
+            all.push(serde_json::to_value(&meta).unwrap_or_default());
+        }
     }
 
     serde_json::Value::Array(all)
