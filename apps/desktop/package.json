@@ -1,6 +1,6 @@
 {
   "name": "@twistedflow/desktop",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "private": true,
   "description": "TwistedFlow — visual flow engine",
   "scripts": {
