@@ -2,7 +2,7 @@
 //!
 //! Commands:
 //!   twistedflow plugin new <name> [--category C] [--description D] [--node N]... [--force]
-//!   twistedflow plugin build [--install DIR] [--no-install] [--debug]
+//!   twistedflow plugin build [--project DIR] [--install DIR] [--no-install] [--debug]
 
 use std::path::PathBuf;
 use std::process::Command;
@@ -32,6 +32,9 @@ pub enum PluginCmd {
     },
     /// Compile the plugin in the current directory and install it
     Build {
+        /// Project directory to install into (defaults to nearest parent with twistedflow.toml)
+        #[arg(long)]
+        project: Option<PathBuf>,
         /// Install path (overrides auto-detection)
         #[arg(long)]
         install: Option<PathBuf>,
@@ -116,13 +119,13 @@ twistedflow plugin build
 ```
 
 This compiles to `target/wasm32-wasip1/release/{underscored}.wasm` and installs
-it to `./nodes/` if present, else `~/.twistedflow/plugins/`.
+it to the nearest TwistedFlow project's `nodes/` directory.
 
 ## Manual build
 
 ```bash
 cargo build --target wasm32-wasip1 --release
-cp target/wasm32-wasip1/release/{underscored}.wasm ~/.twistedflow/plugins/
+cp target/wasm32-wasip1/release/{underscored}.wasm /path/to/project/nodes/
 ```
 
 ## Docs
@@ -130,7 +133,11 @@ cp target/wasm32-wasip1/release/{underscored}.wasm ~/.twistedflow/plugins/
 See the [TwistedFlow plugin guide](https://github.com/imkarmadev/TwistedFlow/blob/main/docs/plugins.md).
 "#,
         name = name,
-        desc = if description.is_empty() { "A TwistedFlow WASM plugin." } else { description },
+        desc = if description.is_empty() {
+            "A TwistedFlow WASM plugin."
+        } else {
+            description
+        },
         underscored = crate_name.replace('-', "_"),
     );
     std::fs::write(dir.join("README.md"), readme)
@@ -215,23 +222,19 @@ fn to_camel(s: &str) -> String {
 
 /// The SDK crate source files, embedded at compile time. This makes the CLI
 /// fully self-contained — external users don't need the repo or crates.io.
-const EMBEDDED_SDK_CARGO_TOML: &str =
-    include_str!("../../twistedflow-plugin/Cargo.toml");
-const EMBEDDED_SDK_LIB_RS: &str =
-    include_str!("../../twistedflow-plugin/src/lib.rs");
+const EMBEDDED_SDK_CARGO_TOML: &str = include_str!("../../twistedflow-plugin/Cargo.toml");
+const EMBEDDED_SDK_LIB_RS: &str = include_str!("../../twistedflow-plugin/src/lib.rs");
 
 /// Extract the embedded SDK to `~/.twistedflow/sdk/twistedflow-plugin/`
 /// so scaffolded plugins can depend on it via path. Only writes if the
 /// files are missing or the version changed.
 fn ensure_sdk_extracted() -> Result<PathBuf, String> {
     let home = std::env::var("HOME").map_err(|_| "$HOME not set")?;
-    let sdk_dir = PathBuf::from(home)
-        .join(".twistedflow/sdk/twistedflow-plugin");
+    let sdk_dir = PathBuf::from(home).join(".twistedflow/sdk/twistedflow-plugin");
 
     let needs_write = if sdk_dir.join("Cargo.toml").exists() {
         // Check if version changed (re-extract on CLI upgrade)
-        let existing = std::fs::read_to_string(sdk_dir.join("Cargo.toml"))
-            .unwrap_or_default();
+        let existing = std::fs::read_to_string(sdk_dir.join("Cargo.toml")).unwrap_or_default();
         existing != EMBEDDED_SDK_CARGO_TOML
     } else {
         true
@@ -266,7 +269,10 @@ fn sdk_dep_string() -> String {
             )
         }
         Err(e) => {
-            eprintln!("Warning: could not extract SDK: {}. Falling back to git dep.", e);
+            eprintln!(
+                "Warning: could not extract SDK: {}. Falling back to git dep.",
+                e
+            );
             r#"twistedflow-plugin = { git = "https://github.com/imkarmadev/TwistedFlow", package = "twistedflow-plugin" }"#.to_string()
         }
     }
@@ -275,6 +281,7 @@ fn sdk_dep_string() -> String {
 // ── `plugin build` ──────────────────────────────────────────────────
 
 pub fn run_build(
+    project: Option<PathBuf>,
     install: Option<PathBuf>,
     no_install: bool,
     debug: bool,
@@ -296,8 +303,8 @@ pub fn run_build(
         return Err("This doesn't look like a TwistedFlow plugin crate (no `twistedflow-plugin` dependency found).".into());
     }
 
-    let crate_name = parse_crate_name(&toml_content)
-        .ok_or("Could not parse crate name from Cargo.toml")?;
+    let crate_name =
+        parse_crate_name(&toml_content).ok_or("Could not parse crate name from Cargo.toml")?;
 
     // Compile
     println!("→ Compiling {} to wasm32-wasip1...", crate_name);
@@ -345,29 +352,34 @@ pub fn run_build(
         return Ok(());
     }
 
-    // Determine install dir
+    // Determine install dir. Runtime custom nodes are project assets, so the
+    // default install target is <project>/nodes. There is intentionally no
+    // ~/.twistedflow/plugins fallback.
     let install_dir = if let Some(dir) = install {
         dir
-    } else if cwd.join("nodes").is_dir() {
-        cwd.join("nodes")
     } else {
-        let home = std::env::var("HOME").map_err(|_| "$HOME not set")?;
-        let dir = PathBuf::from(home).join(".twistedflow/plugins");
-        std::fs::create_dir_all(&dir)
-            .map_err(|e| format!("Failed to create {}: {}", dir.display(), e))?;
-        dir
+        let project_dir = if let Some(project) = project {
+            validate_project_dir(&project)?
+        } else {
+            find_project_root(&cwd).ok_or_else(|| {
+                format!(
+                    "Could not find a TwistedFlow project above {}. Run from inside <project>/nodes-src/<plugin>, pass --project /path/to/project, pass --install /path/to/nodes, or use --no-install.",
+                    cwd.display()
+                )
+            })?
+        };
+        project_dir.join("nodes")
     };
+
+    std::fs::create_dir_all(&install_dir)
+        .map_err(|e| format!("Failed to create {}: {}", install_dir.display(), e))?;
 
     let dest = install_dir.join(&wasm_name);
     std::fs::copy(&wasm_path, &dest)
         .map_err(|e| format!("Failed to copy to {}: {}", dest.display(), e))?;
 
     let size = std::fs::metadata(&dest).map(|m| m.len()).unwrap_or(0);
-    println!(
-        "✓ Installed: {} ({} KB)",
-        dest.display(),
-        size / 1024
-    );
+    println!("✓ Installed: {} ({} KB)", dest.display(), size / 1024);
 
     Ok(())
 }
@@ -387,6 +399,26 @@ fn parse_crate_name(toml: &str) -> Option<String> {
                 let rest = trimmed[eq + 1..].trim();
                 return Some(rest.trim_matches('"').trim_matches('\'').to_string());
             }
+        }
+    }
+    None
+}
+
+fn validate_project_dir(path: &std::path::Path) -> Result<PathBuf, String> {
+    if path.join("twistedflow.toml").exists() {
+        Ok(path.to_path_buf())
+    } else {
+        Err(format!(
+            "Not a TwistedFlow project (missing twistedflow.toml in {})",
+            path.display()
+        ))
+    }
+}
+
+fn find_project_root(start: &std::path::Path) -> Option<PathBuf> {
+    for dir in start.ancestors() {
+        if dir.join("twistedflow.toml").exists() {
+            return Some(dir.to_path_buf());
         }
     }
     None

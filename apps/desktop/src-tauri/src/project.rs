@@ -7,11 +7,16 @@
 //!   ├── .env.dev
 //!   ├── flows/
 //!   │   └── main.flow.json
-//!   └── nodes/
-//!       └── custom.wasm
+//!   ├── nodes/
+//!   │   └── custom.wasm
+//!   └── nodes-src/
+//!       └── custom/
+//!           ├── Cargo.toml
+//!           └── src/lib.rs
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::BTreeMap;
 use std::path::Path;
 
 // ── Types ───────────────────────────────────────────────────────────
@@ -79,6 +84,30 @@ pub struct EnvVar {
     pub value: String,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CustomNodeSummary {
+    pub type_id: String,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CustomNodeAsset {
+    pub id: String,
+    pub name: String,
+    pub wasm_path: Option<String>,
+    pub source_path: Option<String>,
+    /// "loaded", "draft", or "invalid". The UI decides which actions to
+    /// show from can_use/can_build rather than parsing this field.
+    pub status: String,
+    pub can_use: bool,
+    pub can_build: bool,
+    pub can_open_source: bool,
+    pub nodes: Vec<CustomNodeSummary>,
+    pub error: Option<String>,
+}
+
 // ── Project TOML config ─────────────────────────────────────────────
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -120,7 +149,11 @@ fn parse_dotenv(content: &str) -> Vec<EnvVar> {
         }
         if let Some((key, value)) = line.split_once('=') {
             let key = key.trim().to_string();
-            let value = value.trim().trim_matches('"').trim_matches('\'').to_string();
+            let value = value
+                .trim()
+                .trim_matches('"')
+                .trim_matches('\'')
+                .to_string();
             if !key.is_empty() {
                 vars.push(EnvVar { key, value });
             }
@@ -181,6 +214,8 @@ pub fn create_project(parent_path: String, name: String) -> Result<ProjectInfo, 
         .map_err(|e| format!("Failed to create flows dir: {}", e))?;
     std::fs::create_dir_all(project_dir.join("nodes"))
         .map_err(|e| format!("Failed to create nodes dir: {}", e))?;
+    std::fs::create_dir_all(project_dir.join("nodes-src"))
+        .map_err(|e| format!("Failed to create nodes-src dir: {}", e))?;
 
     // twistedflow.toml
     let toml = format!("name = \"{}\"\n", name);
@@ -232,6 +267,7 @@ pub fn open_project(path: String) -> Result<ProjectInfo, String> {
             project_path.display()
         ));
     }
+    ensure_project_dirs(project_path)?;
     let config = read_project_config(project_path)?;
     let canonical = project_path.to_string_lossy().to_string();
     Ok(ProjectInfo {
@@ -249,8 +285,8 @@ pub fn list_flows(project_path: String) -> Result<Vec<FlowSummary>, String> {
     }
 
     let mut flows = Vec::new();
-    let entries = std::fs::read_dir(&flows_dir)
-        .map_err(|e| format!("Cannot read flows dir: {}", e))?;
+    let entries =
+        std::fs::read_dir(&flows_dir).map_err(|e| format!("Cannot read flows dir: {}", e))?;
 
     for entry in entries.flatten() {
         let path = entry.path();
@@ -271,21 +307,143 @@ pub fn list_flows(project_path: String) -> Result<Vec<FlowSummary>, String> {
                 .and_then(|c| serde_json::from_str::<Value>(&c).ok());
             let name = parsed
                 .as_ref()
-                .and_then(|v| v.get("name").and_then(|n| n.as_str()).map(|s| s.to_string()))
+                .and_then(|v| {
+                    v.get("name")
+                        .and_then(|n| n.as_str())
+                        .map(|s| s.to_string())
+                })
                 .unwrap_or(fallback_name);
             let kind = parsed
                 .as_ref()
-                .and_then(|v| v.get("kind").and_then(|k| k.as_str()).map(|s| s.to_string()))
+                .and_then(|v| {
+                    v.get("kind")
+                        .and_then(|k| k.as_str())
+                        .map(|s| s.to_string())
+                })
                 .unwrap_or_else(|| "main".to_string());
-            flows.push(FlowSummary { name, filename, kind });
+            flows.push(FlowSummary {
+                name,
+                filename,
+                kind,
+            });
         }
     }
 
     // Sort: main flows first, subflows second; alphabetical within each group.
-    flows.sort_by(|a, b| {
-        a.kind.cmp(&b.kind).then_with(|| a.name.cmp(&b.name))
-    });
+    flows.sort_by(|a, b| a.kind.cmp(&b.kind).then_with(|| a.name.cmp(&b.name)));
     Ok(flows)
+}
+
+/// List project-local custom node assets. Runtime artifacts live in
+/// `{project}/nodes/*.wasm`; editable/buildable source projects live in
+/// `{project}/nodes-src/*/Cargo.toml`.
+#[tauri::command]
+pub fn list_custom_nodes(project_path: String) -> Result<Vec<CustomNodeAsset>, String> {
+    let project_dir = Path::new(&project_path);
+    ensure_project_dirs(project_dir)?;
+
+    let mut assets: BTreeMap<String, CustomNodeAsset> = BTreeMap::new();
+    let nodes_dir = project_dir.join("nodes");
+    let sources_dir = project_dir.join("nodes-src");
+
+    if let Ok(entries) = std::fs::read_dir(&nodes_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("wasm") {
+                continue;
+            }
+
+            let id = path
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("custom-node")
+                .to_string();
+            let wasm_path = path.to_string_lossy().to_string();
+
+            let (status, can_use, nodes, error) = match twistedflow_engine::validate_wasm(&path) {
+                Ok(nodes) => {
+                    let nodes = nodes
+                        .into_iter()
+                        .map(|(type_id, name)| CustomNodeSummary { type_id, name })
+                        .collect::<Vec<_>>();
+                    ("loaded".to_string(), true, nodes, None)
+                }
+                Err(e) => ("invalid".to_string(), false, Vec::new(), Some(e)),
+            };
+
+            let name = nodes
+                .first()
+                .map(|n| n.name.clone())
+                .unwrap_or_else(|| id.clone());
+
+            assets.insert(
+                id.clone(),
+                CustomNodeAsset {
+                    id,
+                    name,
+                    wasm_path: Some(wasm_path),
+                    source_path: None,
+                    status,
+                    can_use,
+                    can_build: false,
+                    can_open_source: false,
+                    nodes,
+                    error,
+                },
+            );
+        }
+    }
+
+    if let Ok(entries) = std::fs::read_dir(&sources_dir) {
+        for entry in entries.flatten() {
+            let source_path = entry.path();
+            let cargo_toml = source_path.join("Cargo.toml");
+            if !cargo_toml.exists() {
+                continue;
+            }
+
+            let toml = std::fs::read_to_string(&cargo_toml).unwrap_or_default();
+            if !toml.contains("twistedflow-plugin") {
+                continue;
+            }
+
+            let source_name = source_path
+                .file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or("custom-node")
+                .to_string();
+            let crate_name = parse_crate_name(&toml).unwrap_or_else(|| source_name.clone());
+            let artifact_id = crate_name.replace('-', "_");
+            let source_path_str = source_path.to_string_lossy().to_string();
+
+            match assets.get_mut(&artifact_id) {
+                Some(asset) => {
+                    asset.source_path = Some(source_path_str);
+                    asset.can_build = true;
+                    asset.can_open_source = true;
+                }
+                None => {
+                    assets.insert(
+                        artifact_id.clone(),
+                        CustomNodeAsset {
+                            id: artifact_id,
+                            name: source_name,
+                            wasm_path: None,
+                            source_path: Some(source_path_str),
+                            status: "draft".to_string(),
+                            can_use: false,
+                            can_build: true,
+                            can_open_source: true,
+                            nodes: Vec::new(),
+                            error: None,
+                        },
+                    );
+                }
+            }
+        }
+    }
+
+    Ok(assets.into_values().collect())
 }
 
 /// Read a single flow file.
@@ -295,8 +453,8 @@ pub fn get_flow(project_path: String, filename: String) -> Result<FlowDetail, St
     let content = std::fs::read_to_string(&flow_path)
         .map_err(|e| format!("Cannot read flow {}: {}", filename, e))?;
 
-    let parsed: Value = serde_json::from_str(&content)
-        .map_err(|e| format!("Invalid flow JSON: {}", e))?;
+    let parsed: Value =
+        serde_json::from_str(&content).map_err(|e| format!("Invalid flow JSON: {}", e))?;
 
     let name = parsed
         .get("name")
@@ -350,7 +508,11 @@ pub fn save_flow(
 
     let existing_name = existing
         .as_ref()
-        .and_then(|v| v.get("name").and_then(|n| n.as_str()).map(|s| s.to_string()))
+        .and_then(|v| {
+            v.get("name")
+                .and_then(|n| n.as_str())
+                .map(|s| s.to_string())
+        })
         .unwrap_or_else(|| {
             filename
                 .strip_suffix(".flow.json")
@@ -358,25 +520,19 @@ pub fn save_flow(
                 .to_string()
         });
 
-    let vars = variables.or_else(|| {
-        existing.as_ref().and_then(|v| v.get("variables").cloned())
+    let vars = variables.or_else(|| existing.as_ref().and_then(|v| v.get("variables").cloned()));
+
+    let iface = interface.or_else(|| existing.as_ref().and_then(|v| v.get("interface").cloned()));
+
+    let grps = groups.or_else(|| existing.as_ref().and_then(|v| v.get("groups").cloned()));
+
+    let existing_kind = existing.as_ref().and_then(|v| {
+        v.get("kind")
+            .and_then(|k| k.as_str())
+            .map(|s| s.to_string())
     });
 
-    let iface = interface.or_else(|| {
-        existing.as_ref().and_then(|v| v.get("interface").cloned())
-    });
-
-    let grps = groups.or_else(|| {
-        existing.as_ref().and_then(|v| v.get("groups").cloned())
-    });
-
-    let existing_kind = existing
-        .as_ref()
-        .and_then(|v| v.get("kind").and_then(|k| k.as_str()).map(|s| s.to_string()));
-
-    let existing_category = existing
-        .as_ref()
-        .and_then(|v| v.get("category").cloned());
+    let existing_category = existing.as_ref().and_then(|v| v.get("category").cloned());
 
     let mut flow = serde_json::json!({
         "twistedflow": 1,
@@ -405,8 +561,7 @@ pub fn save_flow(
     }
 
     let json = serde_json::to_string_pretty(&flow).unwrap();
-    std::fs::write(&flow_path, json)
-        .map_err(|e| format!("Failed to save flow: {}", e))?;
+    std::fs::write(&flow_path, json).map_err(|e| format!("Failed to save flow: {}", e))?;
 
     Ok(())
 }
@@ -437,8 +592,7 @@ pub fn create_flow(project_path: String, name: String) -> Result<FlowSummary, St
     });
 
     let json = serde_json::to_string_pretty(&flow).unwrap();
-    std::fs::write(&flow_path, json)
-        .map_err(|e| format!("Failed to create flow: {}", e))?;
+    std::fs::write(&flow_path, json).map_err(|e| format!("Failed to create flow: {}", e))?;
 
     Ok(FlowSummary {
         name,
@@ -499,8 +653,7 @@ pub fn create_subflow(project_path: String, name: String) -> Result<FlowSummary,
     });
 
     let json = serde_json::to_string_pretty(&flow).unwrap();
-    std::fs::write(&flow_path, json)
-        .map_err(|e| format!("Failed to create subflow: {}", e))?;
+    std::fs::write(&flow_path, json).map_err(|e| format!("Failed to create subflow: {}", e))?;
 
     Ok(FlowSummary {
         name,
@@ -513,8 +666,7 @@ pub fn create_subflow(project_path: String, name: String) -> Result<FlowSummary,
 #[tauri::command]
 pub fn delete_flow(project_path: String, filename: String) -> Result<(), String> {
     let flow_path = Path::new(&project_path).join("flows").join(&filename);
-    std::fs::remove_file(&flow_path)
-        .map_err(|e| format!("Failed to delete flow: {}", e))?;
+    std::fs::remove_file(&flow_path).map_err(|e| format!("Failed to delete flow: {}", e))?;
     Ok(())
 }
 
@@ -535,10 +687,10 @@ pub fn rename_flow(
     }
 
     // Update the name field inside the JSON
-    let content = std::fs::read_to_string(&old_path)
-        .map_err(|e| format!("Cannot read flow: {}", e))?;
-    let mut parsed: Value = serde_json::from_str(&content)
-        .map_err(|e| format!("Invalid JSON: {}", e))?;
+    let content =
+        std::fs::read_to_string(&old_path).map_err(|e| format!("Cannot read flow: {}", e))?;
+    let mut parsed: Value =
+        serde_json::from_str(&content).map_err(|e| format!("Invalid JSON: {}", e))?;
     if let Value::Object(ref mut map) = parsed {
         map.insert("name".into(), Value::String(new_name.clone()));
     }
@@ -548,8 +700,7 @@ pub fn rename_flow(
         .unwrap_or("main")
         .to_string();
     let json = serde_json::to_string_pretty(&parsed).unwrap();
-    std::fs::write(&new_path, json)
-        .map_err(|e| format!("Failed to write: {}", e))?;
+    std::fs::write(&new_path, json).map_err(|e| format!("Failed to write: {}", e))?;
 
     // Remove old file if filename changed
     if old_path != new_path {
@@ -569,8 +720,8 @@ pub fn list_environments(project_path: String) -> Result<Vec<EnvInfo>, String> {
     let project_dir = Path::new(&project_path);
     let mut envs = Vec::new();
 
-    let entries = std::fs::read_dir(project_dir)
-        .map_err(|e| format!("Cannot read project dir: {}", e))?;
+    let entries =
+        std::fs::read_dir(project_dir).map_err(|e| format!("Cannot read project dir: {}", e))?;
 
     for entry in entries.flatten() {
         let path = entry.path();
@@ -616,17 +767,13 @@ pub fn save_environment(
     let filename = env_filename_from_name(&env_name);
     let env_path = Path::new(&project_path).join(&filename);
     let content = serialize_dotenv(&vars);
-    std::fs::write(&env_path, content)
-        .map_err(|e| format!("Failed to save environment: {}", e))?;
+    std::fs::write(&env_path, content).map_err(|e| format!("Failed to save environment: {}", e))?;
     Ok(())
 }
 
 /// Create a new environment file.
 #[tauri::command]
-pub fn create_environment(
-    project_path: String,
-    env_name: String,
-) -> Result<EnvInfo, String> {
+pub fn create_environment(project_path: String, env_name: String) -> Result<EnvInfo, String> {
     let filename = env_filename_from_name(&env_name);
     let env_path = Path::new(&project_path).join(&filename);
     if env_path.exists() {
@@ -646,8 +793,7 @@ pub fn create_environment(
 pub fn delete_environment(project_path: String, env_name: String) -> Result<(), String> {
     let filename = env_filename_from_name(&env_name);
     let env_path = Path::new(&project_path).join(&filename);
-    std::fs::remove_file(&env_path)
-        .map_err(|e| format!("Failed to delete environment: {}", e))?;
+    std::fs::remove_file(&env_path).map_err(|e| format!("Failed to delete environment: {}", e))?;
     Ok(())
 }
 
@@ -655,9 +801,43 @@ pub fn delete_environment(project_path: String, env_name: String) -> Result<(), 
 
 fn sanitize_filename(name: &str) -> String {
     name.chars()
-        .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
+        .map(|c| {
+            if c.is_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '-'
+            }
+        })
         .collect::<String>()
         .to_lowercase()
+}
+
+fn ensure_project_dirs(project_path: &Path) -> Result<(), String> {
+    std::fs::create_dir_all(project_path.join("flows"))
+        .map_err(|e| format!("Failed to create flows dir: {}", e))?;
+    std::fs::create_dir_all(project_path.join("nodes"))
+        .map_err(|e| format!("Failed to create nodes dir: {}", e))?;
+    std::fs::create_dir_all(project_path.join("nodes-src"))
+        .map_err(|e| format!("Failed to create nodes-src dir: {}", e))?;
+    Ok(())
+}
+
+fn parse_crate_name(toml: &str) -> Option<String> {
+    let mut in_package = false;
+    for line in toml.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') {
+            in_package = trimmed == "[package]";
+            continue;
+        }
+        if in_package && trimmed.starts_with("name") {
+            if let Some(eq) = trimmed.find('=') {
+                let rest = trimmed[eq + 1..].trim();
+                return Some(rest.trim_matches('"').trim_matches('\'').to_string());
+            }
+        }
+    }
+    None
 }
 
 fn expand_tilde(path: &str) -> std::path::PathBuf {

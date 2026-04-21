@@ -9,9 +9,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State};
 use tokio_util::sync::CancellationToken;
-use twistedflow_engine::{
-    ExecContext, FlowGraph, GraphIndex, LogEntry, RunFlowOpts, StatusEvent,
-};
+use twistedflow_engine::{ExecContext, FlowGraph, GraphIndex, LogEntry, RunFlowOpts, StatusEvent};
 
 /// Shared state for active runs. Supports multiple concurrent flows.
 pub struct ExecutorState {
@@ -103,18 +101,21 @@ pub async fn run_flow(
         .build()
         .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
 
-    // Build the node registry: built-in nodes (via inventory) + WASM plugins + project subflows.
+    // Build the node registry: built-in nodes (via inventory) + project-local
+    // WASM nodes + project subflows. Custom nodes are project assets; the
+    // desktop app intentionally does not load a machine-global plugin folder.
     let mut registry = twistedflow_engine::build_registry();
 
-    // Load WASM plugins from default + project-specific directories
-    let plugin_dirs = vec![twistedflow_engine::DEFAULT_PLUGINS_DIR];
+    // Load WASM plugins from {project}/nodes/*.wasm.
+    let project_dir = std::path::Path::new(&project_path);
+    let project_nodes_dir = project_dir.join("nodes").to_string_lossy().to_string();
+    let plugin_dirs = vec![project_nodes_dir.as_str()];
     let wasm_nodes = twistedflow_engine::load_wasm_plugins(&plugin_dirs);
     for (type_id, node, _meta) in wasm_nodes {
         registry.insert(type_id.to_string(), node);
     }
 
     // Load subflows from {project}/flows/*.flow.json with kind=subflow
-    let project_dir = std::path::Path::new(&project_path);
     let subflow_nodes = twistedflow_engine::load_subflows(project_dir, |msg| eprintln!("{}", msg));
     for (type_id, node, _meta) in subflow_nodes {
         registry.insert(type_id, node);
@@ -133,9 +134,7 @@ pub async fn run_flow(
     });
 
     // Run the engine in a spawned task so panics are caught by tokio
-    let handle = tokio::spawn(async move {
-        twistedflow_engine::run_flow(opts).await
-    });
+    let handle = tokio::spawn(async move { twistedflow_engine::run_flow(opts).await });
     let result = handle.await;
 
     // Always clean up: remove token and notify frontend (even on panic)
@@ -168,7 +167,7 @@ pub fn running_flows(executor_state: State<'_, ExecutorState>) -> Vec<String> {
     guard.keys().cloned().collect()
 }
 
-/// Return metadata for all available node types (built-in + WASM plugins + subflows).
+/// Return metadata for all available node types (built-in + project WASM nodes + subflows).
 /// `project_path` is optional — when provided, subflows from that project's
 /// `flows/` directory are included (as `fn:<name>` types).
 #[tauri::command]
@@ -180,17 +179,20 @@ pub fn list_node_types(project_path: Option<String>) -> serde_json::Value {
         all.push(serde_json::to_value(meta).unwrap_or_default());
     }
 
-    // WASM plugins
-    let plugin_dirs = vec![twistedflow_engine::DEFAULT_PLUGINS_DIR];
-    let wasm_nodes = twistedflow_engine::load_wasm_plugins(&plugin_dirs);
-    for (_type_id, _node, meta) in wasm_nodes {
-        all.push(serde_json::to_value(&meta).unwrap_or_default());
-    }
-
-    // Subflows from the active project
     if let Some(p) = project_path {
         let project_dir = std::path::Path::new(&p);
-        let subflow_nodes = twistedflow_engine::load_subflows(project_dir, |msg| eprintln!("{}", msg));
+
+        // WASM nodes from the active project only.
+        let project_nodes_dir = project_dir.join("nodes").to_string_lossy().to_string();
+        let plugin_dirs = vec![project_nodes_dir.as_str()];
+        let wasm_nodes = twistedflow_engine::load_wasm_plugins(&plugin_dirs);
+        for (_type_id, _node, meta) in wasm_nodes {
+            all.push(serde_json::to_value(&meta).unwrap_or_default());
+        }
+
+        // Subflows from the active project.
+        let subflow_nodes =
+            twistedflow_engine::load_subflows(project_dir, |msg| eprintln!("{}", msg));
         for (_type_id, _node, meta) in subflow_nodes {
             all.push(serde_json::to_value(&meta).unwrap_or_default());
         }
@@ -216,18 +218,26 @@ pub async fn build_flow(
         .unwrap_or(&flow_filename)
         .to_string();
 
-    let _ = app.emit("build:progress", serde_json::json!({
-        "stage": "preparing",
-        "message": "Preparing build...",
-    }));
+    let _ = app.emit(
+        "build:progress",
+        serde_json::json!({
+            "stage": "preparing",
+            "message": "Preparing build...",
+        }),
+    );
 
     // Find the twistedflow-cli binary — it's in the same target dir as this binary
-    let cli_path = find_cli_binary().ok_or("Cannot find twistedflow-cli binary. Build it with: cargo build -p twistedflow-cli")?;
+    let cli_path = find_cli_binary().ok_or(
+        "Cannot find twistedflow-cli binary. Build it with: cargo build -p twistedflow-cli",
+    )?;
 
-    let _ = app.emit("build:progress", serde_json::json!({
-        "stage": "compiling",
-        "message": format!("Compiling flow '{}' (this may take a moment)...", flow_name),
-    }));
+    let _ = app.emit(
+        "build:progress",
+        serde_json::json!({
+            "stage": "compiling",
+            "message": format!("Compiling flow '{}' (this may take a moment)...", flow_name),
+        }),
+    );
 
     // Run the CLI build command as a subprocess
     let output = tokio::process::Command::new(&cli_path)
@@ -258,17 +268,23 @@ pub async fn build_flow(
             format!("{:.0}KB", size as f64 / 1024.0)
         };
 
-        let _ = app.emit("build:progress", serde_json::json!({
-            "stage": "done",
-            "message": format!("Built successfully: {} ({})", output_path, size_str),
-        }));
+        let _ = app.emit(
+            "build:progress",
+            serde_json::json!({
+                "stage": "done",
+                "message": format!("Built successfully: {} ({})", output_path, size_str),
+            }),
+        );
 
         Ok(format!("{} ({})", output_path, size_str))
     } else {
-        let _ = app.emit("build:progress", serde_json::json!({
-            "stage": "error",
-            "message": format!("Build failed: {}", stderr.trim()),
-        }));
+        let _ = app.emit(
+            "build:progress",
+            serde_json::json!({
+                "stage": "error",
+                "message": format!("Build failed: {}", stderr.trim()),
+            }),
+        );
 
         Err(format!("Build failed:\n{}", stderr.trim()))
     }

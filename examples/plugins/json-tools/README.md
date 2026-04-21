@@ -27,7 +27,7 @@ Or manually:
 
 ```bash
 cargo build --target wasm32-wasip1 --release
-cp target/wasm32-wasip1/release/twistedflow_plugin_json_tools.wasm ~/.twistedflow/plugins/
+cp target/wasm32-wasip1/release/twistedflow_plugin_json_tools.wasm /path/to/project/nodes/
 ```
 
 ## Usage

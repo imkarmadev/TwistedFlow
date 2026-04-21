@@ -202,9 +202,11 @@ fn call_wasm_execute(
     let type_id_ptr = base;
     let inputs_ptr = base + type_id_bytes.len() + 16; // pad
 
-    memory.write(&mut store, type_id_ptr, type_id_bytes)
+    memory
+        .write(&mut store, type_id_ptr, type_id_bytes)
         .map_err(|e| format!("Memory write failed: {}", e))?;
-    memory.write(&mut store, inputs_ptr, inputs_bytes)
+    memory
+        .write(&mut store, inputs_ptr, inputs_bytes)
         .map_err(|e| format!("Memory write failed: {}", e))?;
 
     // Call tf_execute
@@ -349,14 +351,9 @@ fn dirs_next_home() -> Option<PathBuf> {
     std::env::var_os("HOME").map(PathBuf::from)
 }
 
-/// Default plugin directory.
-pub const DEFAULT_PLUGINS_DIR: &str = "~/.twistedflow/plugins";
-
 /// Load all WASM plugins from the given directories.
 /// Returns a vec of (leaked type_id str, Box<dyn Node>) pairs ready for the registry.
-pub fn load_wasm_plugins(
-    dirs: &[&str],
-) -> Vec<(&'static str, Box<dyn Node>, NodeMetadata)> {
+pub fn load_wasm_plugins(dirs: &[&str]) -> Vec<(&'static str, Box<dyn Node>, NodeMetadata)> {
     let engine = Engine::default();
     let mut result = Vec::new();
 
@@ -386,11 +383,7 @@ pub fn load_wasm_plugins(
                     }
                 }
                 Err(e) => {
-                    log::warn!(
-                        "[wasm-plugins] failed to load {}: {}",
-                        path.display(),
-                        e
-                    );
+                    log::warn!("[wasm-plugins] failed to load {}: {}", path.display(), e);
                 }
             }
         }
@@ -419,14 +412,22 @@ fn load_single_wasm(
             type_id: def.type_id.clone(),
             category: def.category.clone(),
             description: def.description.clone(),
-            inputs: def.inputs.iter().map(|p| crate::node::PinDef {
-                key: p.key.clone(),
-                data_type: p.data_type.clone(),
-            }).collect(),
-            outputs: def.outputs.iter().map(|p| crate::node::PinDef {
-                key: p.key.clone(),
-                data_type: p.data_type.clone(),
-            }).collect(),
+            inputs: def
+                .inputs
+                .iter()
+                .map(|p| crate::node::PinDef {
+                    key: p.key.clone(),
+                    data_type: p.data_type.clone(),
+                })
+                .collect(),
+            outputs: def
+                .outputs
+                .iter()
+                .map(|p| crate::node::PinDef {
+                    key: p.key.clone(),
+                    data_type: p.data_type.clone(),
+                })
+                .collect(),
         };
 
         // Leak the type_id so it has 'static lifetime for the registry HashMap key.
@@ -437,8 +438,16 @@ fn load_single_wasm(
             module: module.clone(),
             type_id: def.type_id,
             metadata: metadata.clone(),
-            inputs: def.inputs.iter().map(|p| (p.key.clone(), p.data_type.clone())).collect(),
-            outputs: def.outputs.iter().map(|p| (p.key.clone(), p.data_type.clone())).collect(),
+            inputs: def
+                .inputs
+                .iter()
+                .map(|p| (p.key.clone(), p.data_type.clone()))
+                .collect(),
+            outputs: def
+                .outputs
+                .iter()
+                .map(|p| (p.key.clone(), p.data_type.clone()))
+                .collect(),
         };
 
         nodes.push((type_id, Box::new(wasm_node) as Box<dyn Node>, metadata));

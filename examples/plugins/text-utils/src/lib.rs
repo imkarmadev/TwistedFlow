@@ -1,7 +1,7 @@
 //! Example TwistedFlow plugin — text transformation nodes.
 //!
 //! Build: cargo build --target wasm32-wasip1 --release
-//! Install: cp target/wasm32-wasip1/release/twistedflow_plugin_text_utils.wasm ~/.twistedflow/plugins/
+//! Install: cp target/wasm32-wasip1/release/twistedflow_plugin_text_utils.wasm /path/to/project/nodes/
 
 use twistedflow_plugin::*;
 

@@ -15,7 +15,9 @@ From inside any example directory:
 twistedflow plugin build
 ```
 
-This compiles to `wasm32-wasip1` with release optimizations and auto-installs to `./nodes/` (if present) or `~/.twistedflow/plugins/`.
+This compiles to `wasm32-wasip1` with release optimizations. Run it from inside
+`<project>/nodes-src/<plugin>` or pass `--project /path/to/project` to install
+the built `.wasm` into that project's `nodes/` directory.
 
 ## Write your own
 

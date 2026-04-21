@@ -40,10 +40,14 @@ pub fn build(
     let flows_dir = project.join("flows");
     let mut available_flows: Vec<(String, String)> = Vec::new();
     if flows_dir.exists() {
-        for entry in std::fs::read_dir(&flows_dir).map_err(|e| e.to_string())?.flatten() {
+        for entry in std::fs::read_dir(&flows_dir)
+            .map_err(|e| e.to_string())?
+            .flatten()
+        {
             let path = entry.path();
             if path.extension().and_then(|e| e.to_str()) == Some("json") {
-                let name = path.file_stem()
+                let name = path
+                    .file_stem()
                     .and_then(|s| s.to_str())
                     .unwrap_or("flow")
                     .replace(".flow", "");
@@ -73,7 +77,11 @@ pub fn build(
     };
 
     // Read selected env
-    let env_filename = if env_name == "default" { ".env".into() } else { format!(".env.{}", env_name) };
+    let env_filename = if env_name == "default" {
+        ".env".into()
+    } else {
+        format!(".env.{}", env_name)
+    };
     let env_content = std::fs::read_to_string(project.join(&env_filename)).unwrap_or_default();
 
     eprintln!("Building: flow={}, env={}", selected_name, env_name);
@@ -89,7 +97,7 @@ pub fn build(
     let nodes_path = format!("{}/twistedflow-nodes", CRATES_DIR).replace('\\', "/");
 
     let cargo_toml = format!(
-r#"[package]
+        r#"[package]
 name = "{bin_name}"
 version = "0.1.0"
 edition = "2021"
@@ -105,7 +113,8 @@ serde_json = "1"
 tokio = {{ version = "1", features = ["rt-multi-thread", "macros", "signal"] }}
 tokio-util = "0.7"
 reqwest = {{ version = "0.12", default-features = false, features = ["rustls-tls"] }}
-"#);
+"#
+    );
 
     std::fs::write(build_dir.join("Cargo.toml"), cargo_toml).map_err(|e| e.to_string())?;
 
@@ -121,12 +130,21 @@ reqwest = {{ version = "0.12", default-features = false, features = ["rustls-tls
     let subflows_json = serde_json::to_string(&subflow_sources).unwrap_or_else(|_| "[]".into());
 
     // main.rs — baked in, just runs
-    let escaped_flow = flow_json.replace('\\', "\\\\").replace('"', "\\\"").replace('\n', "\\n");
-    let escaped_env = env_content.replace('\\', "\\\\").replace('"', "\\\"").replace('\n', "\\n");
-    let escaped_subflows = subflows_json.replace('\\', "\\\\").replace('"', "\\\"").replace('\n', "\\n");
+    let escaped_flow = flow_json
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n");
+    let escaped_env = env_content
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n");
+    let escaped_subflows = subflows_json
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n");
 
     let main_rs = format!(
-r##"//! Built by `twistedflow build`. Flow: {flow_name}, Env: {env_name}
+        r##"//! Built by `twistedflow build`. Flow: {flow_name}, Env: {env_name}
 extern crate twistedflow_nodes;
 
 use std::collections::HashMap;
@@ -134,7 +152,7 @@ use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 use twistedflow_engine::{{
     FlowFile, FlowKind, GraphIndex, LogEntry, RunFlowOpts, StatusEvent, SubflowNode,
-    build_registry, load_wasm_plugins, DEFAULT_PLUGINS_DIR,
+    build_registry, load_wasm_plugins,
 }};
 use serde_json::Value;
 use std::sync::Arc as StdArc;
@@ -168,7 +186,15 @@ async fn main() {{
     let index = Arc::new(GraphIndex::build(&graph));
 
     let mut registry = build_registry();
-    for (id, node, _) in load_wasm_plugins(&[DEFAULT_PLUGINS_DIR]) {{ registry.insert(id.to_string(), node); }}
+    let runtime_nodes_dir = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.join("nodes")))
+        .filter(|p| p.is_dir())
+        .or_else(|| std::env::current_dir().ok().map(|d| d.join("nodes")).filter(|p| p.is_dir()));
+    if let Some(nodes_dir) = runtime_nodes_dir {{
+        let nodes_dir = nodes_dir.to_string_lossy().to_string();
+        for (id, node, _) in load_wasm_plugins(&[nodes_dir.as_str()]) {{ registry.insert(id.to_string(), node); }}
+    }}
 
     // Load bundled subflows
     if !SUBFLOWS_JSON.is_empty() {{
@@ -243,10 +269,14 @@ async fn main() {{
     eprintln!("Compiling (this may take a moment)...");
     let mut cmd = Command::new("cargo");
     cmd.arg("build").current_dir(build_dir);
-    if release { cmd.arg("--release"); }
+    if release {
+        cmd.arg("--release");
+    }
 
     let status = cmd.status().map_err(|e| format!("cargo: {}", e))?;
-    if !status.success() { return Err("Compilation failed".into()); }
+    if !status.success() {
+        return Err("Compilation failed".into());
+    }
 
     // Copy binary
     let profile_dir = if release { "release" } else { "debug" };
@@ -259,13 +289,52 @@ async fn main() {{
 
     std::fs::copy(&built, &out_path).map_err(|e| format!("Copy: {}", e))?;
 
+    // Copy project-local custom node artifacts next to the binary. The
+    // generated binary loads ./nodes from beside itself at runtime.
+    let project_nodes = project.join("nodes");
+    if project_nodes.is_dir() {
+        let out_nodes = out_path
+            .parent()
+            .unwrap_or_else(|| Path::new("."))
+            .join("nodes");
+        std::fs::create_dir_all(&out_nodes).map_err(|e| format!("Create nodes dir: {}", e))?;
+        let mut copied_nodes = 0usize;
+        for entry in std::fs::read_dir(&project_nodes)
+            .map_err(|e| e.to_string())?
+            .flatten()
+        {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("wasm") {
+                continue;
+            }
+            let Some(file_name) = path.file_name() else {
+                continue;
+            };
+            let dest = out_nodes.join(file_name);
+            std::fs::copy(&path, &dest)
+                .map_err(|e| format!("Copy node {}: {}", path.display(), e))?;
+            copied_nodes += 1;
+        }
+        if copied_nodes > 0 {
+            eprintln!(
+                "Copied {} custom node artifact(s) to {}",
+                copied_nodes,
+                out_nodes.display()
+            );
+        }
+    }
+
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(&out_path, std::fs::Permissions::from_mode(0o755)).ok();
     }
 
-    eprintln!("Built: {} ({})", out_path.display(), format_size(std::fs::metadata(&out_path).map(|m| m.len()).unwrap_or(0)));
+    eprintln!(
+        "Built: {} ({})",
+        out_path.display(),
+        format_size(std::fs::metadata(&out_path).map(|m| m.len()).unwrap_or(0))
+    );
     Ok(())
 }
 
@@ -280,13 +349,23 @@ fn expand_tilde(path: &Path) -> PathBuf {
 
 fn sanitize(name: &str) -> String {
     name.chars()
-        .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
+        .map(|c| {
+            if c.is_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '-'
+            }
+        })
         .collect::<String>()
         .to_lowercase()
 }
 
 fn format_size(bytes: u64) -> String {
-    if bytes >= 1_048_576 { format!("{:.1}MB", bytes as f64 / 1_048_576.0) }
-    else if bytes >= 1024 { format!("{:.0}KB", bytes as f64 / 1024.0) }
-    else { format!("{}B", bytes) }
+    if bytes >= 1_048_576 {
+        format!("{:.1}MB", bytes as f64 / 1_048_576.0)
+    } else if bytes >= 1024 {
+        format!("{:.0}KB", bytes as f64 / 1024.0)
+    } else {
+        format!("{}B", bytes)
+    }
 }

@@ -10,8 +10,8 @@ mod project;
 // Ensure twistedflow-nodes is linked so inventory discovers all #[node] registrations.
 extern crate twistedflow_nodes;
 use std::sync::Mutex;
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::Manager;
-use tauri::menu::{Menu, MenuItem, Submenu, PredefinedMenuItem};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -22,50 +22,74 @@ pub fn run() {
             // ── Native macOS menu ────────────────────────────────
             let handle = app.handle();
 
-            let app_menu = Submenu::with_items(handle, "TwistedFlow", true, &[
-                &PredefinedMenuItem::about(handle, Some("About TwistedFlow"), None)?,
-                &PredefinedMenuItem::separator(handle)?,
-                &PredefinedMenuItem::services(handle, None)?,
-                &PredefinedMenuItem::separator(handle)?,
-                &PredefinedMenuItem::hide(handle, None)?,
-                &PredefinedMenuItem::hide_others(handle, None)?,
-                &PredefinedMenuItem::show_all(handle, None)?,
-                &PredefinedMenuItem::separator(handle)?,
-                &PredefinedMenuItem::quit(handle, None)?,
-            ])?;
+            let app_menu = Submenu::with_items(
+                handle,
+                "TwistedFlow",
+                true,
+                &[
+                    &PredefinedMenuItem::about(handle, Some("About TwistedFlow"), None)?,
+                    &PredefinedMenuItem::separator(handle)?,
+                    &PredefinedMenuItem::services(handle, None)?,
+                    &PredefinedMenuItem::separator(handle)?,
+                    &PredefinedMenuItem::hide(handle, None)?,
+                    &PredefinedMenuItem::hide_others(handle, None)?,
+                    &PredefinedMenuItem::show_all(handle, None)?,
+                    &PredefinedMenuItem::separator(handle)?,
+                    &PredefinedMenuItem::quit(handle, None)?,
+                ],
+            )?;
 
-            let edit_menu = Submenu::with_items(handle, "Edit", true, &[
-                &PredefinedMenuItem::undo(handle, None)?,
-                &PredefinedMenuItem::redo(handle, None)?,
-                &PredefinedMenuItem::separator(handle)?,
-                &PredefinedMenuItem::cut(handle, None)?,
-                &PredefinedMenuItem::copy(handle, None)?,
-                &PredefinedMenuItem::paste(handle, None)?,
-                &PredefinedMenuItem::select_all(handle, None)?,
-            ])?;
+            let edit_menu = Submenu::with_items(
+                handle,
+                "Edit",
+                true,
+                &[
+                    &PredefinedMenuItem::undo(handle, None)?,
+                    &PredefinedMenuItem::redo(handle, None)?,
+                    &PredefinedMenuItem::separator(handle)?,
+                    &PredefinedMenuItem::cut(handle, None)?,
+                    &PredefinedMenuItem::copy(handle, None)?,
+                    &PredefinedMenuItem::paste(handle, None)?,
+                    &PredefinedMenuItem::select_all(handle, None)?,
+                ],
+            )?;
 
-            let view_menu = Submenu::with_items(handle, "View", true, &[
-                &PredefinedMenuItem::fullscreen(handle, None)?,
-            ])?;
+            let view_menu = Submenu::with_items(
+                handle,
+                "View",
+                true,
+                &[&PredefinedMenuItem::fullscreen(handle, None)?],
+            )?;
 
-            let window_menu = Submenu::with_items(handle, "Window", true, &[
-                &PredefinedMenuItem::minimize(handle, None)?,
-                &PredefinedMenuItem::maximize(handle, None)?,
-                &PredefinedMenuItem::separator(handle)?,
-                &PredefinedMenuItem::close_window(handle, None)?,
-            ])?;
+            let window_menu = Submenu::with_items(
+                handle,
+                "Window",
+                true,
+                &[
+                    &PredefinedMenuItem::minimize(handle, None)?,
+                    &PredefinedMenuItem::maximize(handle, None)?,
+                    &PredefinedMenuItem::separator(handle)?,
+                    &PredefinedMenuItem::close_window(handle, None)?,
+                ],
+            )?;
 
-            let help_menu = Submenu::with_items(handle, "Help", true, &[
-                &MenuItem::with_id(handle, "github", "TwistedFlow on GitHub", true, None::<&str>)?,
-            ])?;
+            let help_menu = Submenu::with_items(
+                handle,
+                "Help",
+                true,
+                &[&MenuItem::with_id(
+                    handle,
+                    "github",
+                    "TwistedFlow on GitHub",
+                    true,
+                    None::<&str>,
+                )?],
+            )?;
 
-            let menu = Menu::with_items(handle, &[
-                &app_menu,
-                &edit_menu,
-                &view_menu,
-                &window_menu,
-                &help_menu,
-            ])?;
+            let menu = Menu::with_items(
+                handle,
+                &[&app_menu, &edit_menu, &view_menu, &window_menu, &help_menu],
+            )?;
             app.set_menu(menu)?;
 
             app.on_menu_event(move |_app_handle, event| {
@@ -90,6 +114,7 @@ pub fn run() {
             project::save_flow,
             project::create_flow,
             project::create_subflow,
+            project::list_custom_nodes,
             project::delete_flow,
             project::rename_flow,
             project::list_environments,

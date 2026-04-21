@@ -16,8 +16,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 use twistedflow_engine::{
-    FlowFile, GraphIndex, LogEntry, RunFlowOpts, StatusEvent,
-    build_registry, load_subflows, load_wasm_plugins, DEFAULT_PLUGINS_DIR,
+    build_registry, load_subflows, load_wasm_plugins, FlowFile, GraphIndex, LogEntry, RunFlowOpts,
+    StatusEvent,
 };
 
 #[derive(Parser)]
@@ -34,9 +34,9 @@ enum Commands {
         /// Path to the .flow.json file
         file: PathBuf,
 
-        /// Plugin directories (comma-separated). Default: ~/.twistedflow/plugins
-        #[arg(long, default_value = DEFAULT_PLUGINS_DIR)]
-        plugins: String,
+        /// Extra plugin directories (comma-separated). Project nodes/ is loaded automatically.
+        #[arg(long)]
+        plugins: Option<String>,
 
         /// Environment variables as key=value pairs
         #[arg(long = "env", short = 'e')]
@@ -98,7 +98,13 @@ async fn main() {
             let code = run_flow(file, plugins, env_vars, base_url, quiet).await;
             std::process::exit(code);
         }
-        Commands::Build { project, output, flow, env, debug } => {
+        Commands::Build {
+            project,
+            output,
+            flow,
+            env,
+            debug,
+        } => {
             if let Err(e) = build::build(&project, &output, flow.as_deref(), &env, !debug) {
                 eprintln!("Build failed: {}", e);
                 std::process::exit(1);
@@ -106,12 +112,19 @@ async fn main() {
         }
         Commands::Plugin { cmd } => {
             let result = match cmd {
-                plugin::PluginCmd::New { name, category, description, nodes, force } => {
-                    plugin::run_new(&name, &category, &description, &nodes, force)
-                }
-                plugin::PluginCmd::Build { install, no_install, debug } => {
-                    plugin::run_build(install, no_install, debug)
-                }
+                plugin::PluginCmd::New {
+                    name,
+                    category,
+                    description,
+                    nodes,
+                    force,
+                } => plugin::run_new(&name, &category, &description, &nodes, force),
+                plugin::PluginCmd::Build {
+                    project,
+                    install,
+                    no_install,
+                    debug,
+                } => plugin::run_build(project, install, no_install, debug),
             };
             if let Err(e) = result {
                 eprintln!("Error: {}", e);
@@ -123,7 +136,7 @@ async fn main() {
 
 async fn run_flow(
     file: PathBuf,
-    plugins: String,
+    plugins: Option<String>,
     env_vars: Vec<String>,
     base_url: Option<String>,
     quiet: bool,
@@ -153,10 +166,25 @@ async fn run_flow(
     let graph = flow_file.to_graph();
     let index = Arc::new(GraphIndex::build(&graph));
 
-    // 3. Build node registry (built-in + WASM plugins)
+    // 3. Build node registry (built-in + project-local WASM nodes)
     let mut registry = build_registry();
 
-    let plugin_dirs: Vec<&str> = plugins.split(',').map(|s| s.trim()).collect();
+    let mut plugin_dir_strings = Vec::new();
+    if let Some(project_dir) =
+        find_project_root(file.parent().unwrap_or_else(|| std::path::Path::new(".")))
+    {
+        plugin_dir_strings.push(project_dir.join("nodes").to_string_lossy().to_string());
+    }
+    if let Some(extra_plugins) = plugins {
+        plugin_dir_strings.extend(
+            extra_plugins
+                .split(',')
+                .map(|s| s.trim())
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string()),
+        );
+    }
+    let plugin_dirs: Vec<&str> = plugin_dir_strings.iter().map(|s| s.as_str()).collect();
     let wasm_nodes = load_wasm_plugins(&plugin_dirs);
     let wasm_count = wasm_nodes.len();
     for (type_id, node, _meta) in wasm_nodes {
@@ -167,10 +195,11 @@ async fn run_flow(
         eprintln!("  loaded {} WASM plugin node(s)", wasm_count);
     }
 
-    // Load subflows from the flow file's project dir
-    // ({project}/flows/xxx.flow.json → project = file.parent().parent())
-    if let Some(project_dir) = file.parent().and_then(|p| p.parent()) {
-        let subflows = load_subflows(project_dir, |msg| eprintln!("{}", msg));
+    // Load subflows from the nearest project dir.
+    if let Some(project_dir) =
+        find_project_root(file.parent().unwrap_or_else(|| std::path::Path::new(".")))
+    {
+        let subflows = load_subflows(&project_dir, |msg| eprintln!("{}", msg));
         let sub_count = subflows.len();
         for (type_id, node, _meta) in subflows {
             registry.insert(type_id, node);
@@ -194,7 +223,11 @@ async fn run_flow(
         env_base_url: None,
         project_headers: None,
         env_headers: None,
-        env_vars: if env_map.is_empty() { None } else { Some(env_map) },
+        env_vars: if env_map.is_empty() {
+            None
+        } else {
+            Some(env_map)
+        },
         auth: None,
         variables: None,
     };
@@ -277,4 +310,13 @@ async fn run_flow(
             1
         }
     }
+}
+
+fn find_project_root(start: &std::path::Path) -> Option<PathBuf> {
+    for dir in start.ancestors() {
+        if dir.join("twistedflow.toml").exists() {
+            return Some(dir.to_path_buf());
+        }
+    }
+    None
 }

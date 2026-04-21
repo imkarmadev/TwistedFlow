@@ -279,16 +279,20 @@ Plugins are loaded fresh on every flow run, so rebuilding + re-running picks up 
 
 ## Install locations
 
-Plugins are discovered from two directories:
+Desktop projects discover plugins from one project-local directory:
 
 | Path | Scope |
 |------|-------|
-| `~/.twistedflow/plugins/` | Global — available in all projects |
 | `<project>/nodes/` | Project-local — only for that project |
 
-`twistedflow plugin build` auto-picks: if a `nodes/` folder exists in the current directory, install there; otherwise, install globally.
+Editable plugin source should live under `<project>/nodes-src/`. Built `.wasm`
+artifacts live under `<project>/nodes/`.
 
-To override: `twistedflow plugin build --install /some/path`.
+`twistedflow plugin build` auto-picks the nearest parent directory containing
+`twistedflow.toml` and installs into that project's `nodes/` directory.
+
+To override: `twistedflow plugin build --project /path/to/project` or
+`twistedflow plugin build --install /some/path`.
 
 ---
 
@@ -296,7 +300,7 @@ To override: `twistedflow plugin build --install /some/path`.
 
 **Plugin doesn't appear in palette**
 - Check the target: must be `wasm32-wasip1` (NOT `wasm32-wasi`, the old name)
-- Check the .wasm file exists in one of the plugin directories
+- Check the .wasm file exists in the active project's `nodes/` directory
 - Look in the console/terminal for `[wasm-plugin] failed to load` warnings
 
 **Missing required export 'tf_execute'**
